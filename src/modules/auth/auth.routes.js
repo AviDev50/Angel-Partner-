@@ -1,11 +1,11 @@
 import express from "express";
-import { } from "./auth.controller.js";
-import upload from "../../middlewares/upload.js";
+import { login, register, me } from "./auth.controller.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/test", (req, res) => {
-  res.json({ message: "Auth working" });
-});
+router.post("/register", register); // partner self-registration
+router.post("/login", login);
+router.get("/me", authenticate, me);
 
 export default router;
