@@ -180,3 +180,10 @@ export async function createNotification(n, conn = db) {
     [n.user_id, n.type, n.title, n.message, n.entity_id],
   );
 }
+
+export async function updateStatus(id, status, conn = db) {
+  await conn.query(
+    `UPDATE customer_references SET status = ? WHERE customer_reference_id = ?`,
+    [status, id],
+  );
+}

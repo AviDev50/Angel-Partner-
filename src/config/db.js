@@ -12,12 +12,12 @@ const db = mysql.createPool({
   timezone: "Z", // UTC
 });
 
-// Har naye connection pe UTC set karo
-// (promise pool mein conn promise-based hota hai, isliye .catch)
+// Har naye connection pe UTC set karo.
+// "connection" event mein conn callback-style hota hai (promise nahi).
 db.on("connection", (conn) => {
-  conn
-    .query("SET time_zone = '+00:00'")
-    .catch((err) => console.error("time_zone set failed:", err));
+  conn.query("SET time_zone = '+00:00'", (err) => {
+    if (err) console.error("time_zone set failed:", err);
+  });
 });
 
 export async function withTransaction(callback) {
