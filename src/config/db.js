@@ -1,11 +1,9 @@
 import mysql from "mysql2/promise";
-import dotenv from "dotenv";
-
-dotenv.config();2
+import "dotenv/config";
 
 const db = mysql.createPool({
   host: process.env.DB_HOST,
-  port: process.env.DB_PORT || 3306,
+  port: Number(process.env.DB_PORT) || 3306,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
@@ -14,9 +12,12 @@ const db = mysql.createPool({
   timezone: "Z", // UTC
 });
 
-// schema ke hisaab se har connection UTC pe
+// Har naye connection pe UTC set karo
+// (promise pool mein conn promise-based hota hai, isliye .catch)
 db.on("connection", (conn) => {
-  conn.query("SET time_zone = '+00:00'");
+  conn
+    .query("SET time_zone = '+00:00'")
+    .catch((err) => console.error("time_zone set failed:", err));
 });
 
 export async function withTransaction(callback) {
@@ -27,8 +28,12 @@ export async function withTransaction(callback) {
     await conn.commit();
     return result;
   } catch (err) {
-    await conn.rollback();
-    throw err;
+    try {
+      await conn.rollback();
+    } catch (rollbackErr) {
+      console.error("rollback failed:", rollbackErr);
+    }
+    throw err; // original error hi bahar jaayega
   } finally {
     conn.release();
   }
