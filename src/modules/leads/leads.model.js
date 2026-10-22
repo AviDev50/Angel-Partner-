@@ -17,26 +17,6 @@ const LEAD_COLUMNS = `
   sp.full_name        AS source_partner_name
 `;
 
-export async function insertLead(data, conn = db) {
-  const [result] = await conn.query(
-    `INSERT INTO leads
-       (lead_source, customer_name, customer_mobile, customer_email, preferred_bhk,
-        customer_budget, preferred_project_location, remarks, created_by)
-     VALUES ('admin_created', ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      data.customer_name,
-      data.customer_mobile,
-      data.customer_email,
-      data.preferred_bhk,
-      data.customer_budget,
-      data.preferred_project_location,
-      data.remarks,
-      data.created_by,
-    ],
-  );
-  return result.insertId;
-}
-
 export async function getLeadById(id, conn = db) {
   const [rows] = await conn.query(
     `SELECT ${LEAD_COLUMNS} ${LEAD_FROM}

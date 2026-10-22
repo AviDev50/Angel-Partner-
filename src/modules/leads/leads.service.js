@@ -1,7 +1,7 @@
 import { withTransaction } from "../../config/db.js";
 import { httpError } from "../../utils/httpError.js";
 import { parsePositiveInt } from "../../utils/validators.js";
-import { parseCustomerFields, optionalString } from "../../utils/customerFields.js";
+import { optionalString } from "../../utils/customerFields.js";
 import * as leadModel from "./leads.model.js";
 import * as referenceModel from "../references/references.model.js";
 
@@ -9,10 +9,8 @@ const LEAD_STATUSES = [
   "new", "contacted", "follow_up_required", "site_visit_scheduled", "site_visit_completed",
   "booking_in_progress", "converted", "lost", "closed",
 ];
-const LEAD_SOURCES = ["partner_reference", "admin_created", "admin_imported"];
 
-// Sales/admin manually sirf yahi set kar sakte hain.
-// site_visit_* aur converted baaki modules (site visits / bookings) set karenge.
+// site_visit_* aur converted baaki modules (site visits / bookings) set karenge
 const MANUAL_STATUSES = ["contacted", "follow_up_required", "booking_in_progress", "lost", "closed"];
 
 // Terminal: inke baad na status badlega na reassign hoga
@@ -51,33 +49,10 @@ async function loadAccessibleLead(user, idParam) {
   const lead = await leadModel.getLeadById(leadId);
   const isMine =
     lead && lead.assignment_type === "sales_team" && lead.assigned_user_id === user.user_id;
-  if (!lead || (user.role === "sales_team" && !isMine)) {
+  if (!lead || (user.role !== "admin" && !isMine)) {
     throw httpError(404, "Lead not found");
   }
   return lead;
-}
-
-// ---------------------------------------------------------------- create (admin)
-export async function createLeadService(user, body) {
-  const fields = parseCustomerFields(body);
-
-  const leadId = await withTransaction(async (conn) => {
-    const id = await leadModel.insertLead({ ...fields, created_by: user.user_id }, conn);
-    await referenceModel.addStatusHistory(
-      {
-        entity_type: "lead",
-        entity_id: id,
-        from_status: null,
-        to_status: "new",
-        changed_by: user.user_id,
-        remarks: "Created by admin",
-      },
-      conn,
-    );
-    return id;
-  });
-
-  return leadModel.getLeadById(leadId);
 }
 
 // ---------------------------------------------------------------- list
@@ -96,16 +71,6 @@ export async function listLeadsService(user, query) {
     filters.assignedUserId = user.user_id; // hamesha sirf apni
     filters.assignmentType = "sales_team";
   } else {
-    if (query.lead_source) {
-      if (!LEAD_SOURCES.includes(query.lead_source)) throw httpError(400, "Invalid lead_source filter");
-      filters.leadSource = query.lead_source;
-    }
-    if (query.assignment_type) {
-      if (!["sales_team", "partner"].includes(query.assignment_type)) {
-        throw httpError(400, "Invalid assignment_type filter");
-      }
-      filters.assignmentType = query.assignment_type;
-    }
     if (query.unassigned === "true") filters.unassigned = true;
     if (query.assigned_to) {
       const uid = parsePositiveInt(query.assigned_to);
@@ -113,6 +78,7 @@ export async function listLeadsService(user, query) {
       filters.assignedUserId = uid;
     }
   }
+
   const { rows, total } = await leadModel.listLeads(filters);
 
   return {
@@ -175,47 +141,28 @@ export async function updateLeadStatusService(user, idParam, body) {
     );
 
     // partner reference ke saath status sync
-    if (lead.customer_reference_id) {
-      const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
-      const next = ref && nextReferenceStatus(ref.status, status);
-      if (next) {
-        await referenceModel.updateStatus(ref.customer_reference_id, next, conn);
-        await referenceModel.addStatusHistory(
-          {
-            entity_type: "customer_reference",
-            entity_id: ref.customer_reference_id,
-            from_status: ref.status,
-            to_status: next,
-            changed_by: user.user_id,
-            remarks: `Lead status changed to ${status}`,
-          },
-          conn,
-        );
-      }
+    const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
+    const next = ref && nextReferenceStatus(ref.status, status);
+    if (next) {
+      await referenceModel.updateStatus(ref.customer_reference_id, next, conn);
+      await referenceModel.addStatusHistory(
+        {
+          entity_type: "customer_reference",
+          entity_id: ref.customer_reference_id,
+          from_status: ref.status,
+          to_status: next,
+          changed_by: user.user_id,
+          remarks: `Lead status changed to ${status}`,
+        },
+        conn,
+      );
     }
   });
 
   return getLeadService(user, leadId);
 }
 
-// ---------------------------------------------------------------- assign (admin)
-// reference wali lead -> sirf sales team; admin created/imported -> sirf partner
-// (role_name aur assignment_type dono ki value same hai)
-//helper
-function assignmentRuleFor(lead) {
-  return lead.lead_source === "partner_reference"
-    ? {
-        type: "sales_team",
-        label: "an active sales team member",
-        hint: "Leads from partner references can only be assigned to the sales team",
-      }
-    : {
-        type: "partner",
-        label: "an active partner",
-        hint: "Admin created/imported leads can only be assigned to partners",
-      };
-}
-
+// ---------------------------------------------------------------- assign (admin, sirf sales team ko)
 export async function assignLeadService(user, idParam, body) {
   const leadId = parsePositiveInt(idParam);
   if (!leadId) throw httpError(400, "Invalid lead id");
@@ -232,9 +179,8 @@ export async function assignLeadService(user, idParam, body) {
       throw httpError(409, `Lead is '${lead.status}' and cannot be assigned`);
     }
 
-    const rule = assignmentRuleFor(lead);
-    const target = await leadModel.getActiveUserByRole(assignedUserId, rule.type, conn);
-    if (!target) throw httpError(400, `assigned_user_id must be ${rule.label}. ${rule.hint}`);
+    const target = await leadModel.getActiveUserByRole(assignedUserId, "sales_team", conn);
+    if (!target) throw httpError(400, "assigned_user_id must be an active sales team member");
 
     const current = await leadModel.getActiveAssignment(leadId, conn);
     if (current && current.assigned_user_id === assignedUserId) {
@@ -245,7 +191,7 @@ export async function assignLeadService(user, idParam, body) {
     await leadModel.insertAssignment(
       {
         lead_id: leadId,
-        assignment_type: rule.type,
+        assignment_type: "sales_team",
         assigned_user_id: assignedUserId,
         assigned_by: user.user_id,
         remarks,
@@ -253,23 +199,20 @@ export async function assignLeadService(user, idParam, body) {
       conn,
     );
 
-    // reference status sirf reference leads pe (customer_reference_id sirf unhi mein hota hai)
-    if (lead.customer_reference_id) {
-      const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
-      if (ref && ref.status === "accepted") {
-        await referenceModel.updateStatus(ref.customer_reference_id, "assigned_to_sales_team", conn);
-        await referenceModel.addStatusHistory(
-          {
-            entity_type: "customer_reference",
-            entity_id: ref.customer_reference_id,
-            from_status: "accepted",
-            to_status: "assigned_to_sales_team",
-            changed_by: user.user_id,
-            remarks: null,
-          },
-          conn,
-        );
-      }
+    const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
+    if (ref && ref.status === "accepted") {
+      await referenceModel.updateStatus(ref.customer_reference_id, "assigned_to_sales_team", conn);
+      await referenceModel.addStatusHistory(
+        {
+          entity_type: "customer_reference",
+          entity_id: ref.customer_reference_id,
+          from_status: "accepted",
+          to_status: "assigned_to_sales_team",
+          changed_by: user.user_id,
+          remarks: null,
+        },
+        conn,
+      );
     }
 
     await leadModel.createNotification(

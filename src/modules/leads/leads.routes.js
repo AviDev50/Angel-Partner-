@@ -1,6 +1,5 @@
 import express from "express";
 import {
-  createLead,
   listLeads,
   getLead,
   updateLeadStatus,
@@ -14,7 +13,6 @@ const router = express.Router();
 
 router.use(authenticate);
 
-router.post("/", authorize("admin"), createLead);
 router.get("/", authorize("admin", "sales_team"), listLeads);
 router.get("/:id", authorize("admin", "sales_team"), getLead);
 router.patch("/:id/status", authorize("admin", "sales_team"), updateLeadStatus);
