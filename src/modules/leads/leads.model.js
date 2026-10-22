@@ -3,16 +3,16 @@ import db from "../../config/db.js";
 const LEAD_FROM = `
   FROM leads l
   LEFT JOIN lead_assignments la
-         ON la.lead_id = l.lead_id AND la.assignment_type = 'sales_team'
-        AND la.is_active = 1 AND la.deleted_at IS NULL
-  LEFT JOIN users su ON su.user_id = la.assigned_user_id
+         ON la.lead_id = l.lead_id AND la.is_active = 1 AND la.deleted_at IS NULL
+  LEFT JOIN users au ON au.user_id = la.assigned_user_id
   LEFT JOIN users sp ON sp.user_id = l.source_partner_id
 `;
 
 const LEAD_COLUMNS = `
   l.*,
-  la.assigned_user_id AS sales_user_id,
-  su.full_name        AS sales_user_name,
+  la.assignment_type  AS assignment_type,
+  la.assigned_user_id AS assigned_user_id,
+  au.full_name        AS assigned_user_name,
   la.assigned_at      AS assigned_at,
   sp.full_name        AS source_partner_name
 `;
@@ -55,7 +55,7 @@ export async function getLeadForUpdate(id, conn) {
   return rows[0];
 }
 
-export async function listLeads({ status, leadSource, q, salesUserId, unassigned, page, limit }) {
+export async function listLeads({ status, leadSource, q, assignedUserId, assignmentType, unassigned, page, limit }) {
   const where = ["l.deleted_at IS NULL"];
   const params = [];
 
@@ -67,9 +67,13 @@ export async function listLeads({ status, leadSource, q, salesUserId, unassigned
     where.push("l.lead_source = ?");
     params.push(leadSource);
   }
-  if (salesUserId) {
+  if (assignedUserId) {
     where.push("la.assigned_user_id = ?");
-    params.push(salesUserId);
+    params.push(assignedUserId);
+  }
+  if (assignmentType) {
+    where.push("la.assignment_type = ?");
+    params.push(assignmentType);
   }
   if (unassigned) {
     where.push("la.lead_assignment_id IS NULL");
@@ -114,24 +118,23 @@ export async function isActiveSalesAssignee(leadId, userId, conn = db) {
   return rows.length > 0;
 }
 
-export async function getActiveSalesUser(userId, conn = db) {
+export async function getActiveUserByRole(userId, roleName, conn = db) {
   const [rows] = await conn.query(
     `SELECT u.user_id, u.full_name
      FROM users u
      JOIN roles r ON r.role_id = u.role_id AND r.deleted_at IS NULL
-     WHERE u.user_id = ? AND r.role_name = 'sales_team'
+     WHERE u.user_id = ? AND r.role_name = ?
        AND u.status = 'active' AND u.deleted_at IS NULL`,
-    [userId],
+    [userId, roleName],
   );
   return rows[0];
 }
 
-export async function getActiveSalesAssignment(leadId, conn = db) {
+export async function getActiveAssignment(leadId, conn = db) {
   const [rows] = await conn.query(
     `SELECT lead_assignment_id, assigned_user_id
      FROM lead_assignments
-     WHERE lead_id = ? AND assignment_type = 'sales_team'
-       AND is_active = 1 AND deleted_at IS NULL
+     WHERE lead_id = ? AND is_active = 1 AND deleted_at IS NULL
      LIMIT 1`,
     [leadId],
   );
@@ -151,8 +154,8 @@ export async function insertAssignment(data, conn = db) {
   const [result] = await conn.query(
     `INSERT INTO lead_assignments
        (lead_id, assignment_type, assigned_user_id, assigned_by, remarks)
-     VALUES (?, 'sales_team', ?, ?, ?)`,
-    [data.lead_id, data.assigned_user_id, data.assigned_by, data.remarks],
+     VALUES (?, ?, ?, ?, ?)`,
+    [data.lead_id, data.assignment_type, data.assigned_user_id, data.assigned_by, data.remarks],
   );
   return result.insertId;
 }

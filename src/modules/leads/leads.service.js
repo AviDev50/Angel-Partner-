@@ -49,7 +49,9 @@ async function loadAccessibleLead(user, idParam) {
   if (!leadId) throw httpError(400, "Invalid lead id");
 
   const lead = await leadModel.getLeadById(leadId);
-  if (!lead || (user.role === "sales_team" && lead.sales_user_id !== user.user_id)) {
+  const isMine =
+    lead && lead.assignment_type === "sales_team" && lead.assigned_user_id === user.user_id;
+  if (!lead || (user.role === "sales_team" && !isMine)) {
     throw httpError(404, "Lead not found");
   }
   return lead;
@@ -91,20 +93,26 @@ export async function listLeadsService(user, query) {
   if (query.q && String(query.q).trim()) filters.q = String(query.q).trim();
 
   if (user.role === "sales_team") {
-    filters.salesUserId = user.user_id; // hamesha sirf apni
+    filters.assignedUserId = user.user_id; // hamesha sirf apni
+    filters.assignmentType = "sales_team";
   } else {
     if (query.lead_source) {
       if (!LEAD_SOURCES.includes(query.lead_source)) throw httpError(400, "Invalid lead_source filter");
       filters.leadSource = query.lead_source;
     }
+    if (query.assignment_type) {
+      if (!["sales_team", "partner"].includes(query.assignment_type)) {
+        throw httpError(400, "Invalid assignment_type filter");
+      }
+      filters.assignmentType = query.assignment_type;
+    }
     if (query.unassigned === "true") filters.unassigned = true;
     if (query.assigned_to) {
       const uid = parsePositiveInt(query.assigned_to);
       if (!uid) throw httpError(400, "Invalid assigned_to");
-      filters.salesUserId = uid;
+      filters.assignedUserId = uid;
     }
   }
-
   const { rows, total } = await leadModel.listLeads(filters);
 
   return {
@@ -191,12 +199,29 @@ export async function updateLeadStatusService(user, idParam, body) {
 }
 
 // ---------------------------------------------------------------- assign (admin)
+// reference wali lead -> sirf sales team; admin created/imported -> sirf partner
+// (role_name aur assignment_type dono ki value same hai)
+//helper
+function assignmentRuleFor(lead) {
+  return lead.lead_source === "partner_reference"
+    ? {
+        type: "sales_team",
+        label: "an active sales team member",
+        hint: "Leads from partner references can only be assigned to the sales team",
+      }
+    : {
+        type: "partner",
+        label: "an active partner",
+        hint: "Admin created/imported leads can only be assigned to partners",
+      };
+}
+
 export async function assignLeadService(user, idParam, body) {
   const leadId = parsePositiveInt(idParam);
   if (!leadId) throw httpError(400, "Invalid lead id");
 
-  const salesUserId = parsePositiveInt(body.sales_user_id);
-  if (!salesUserId) throw httpError(400, "sales_user_id is required");
+  const assignedUserId = parsePositiveInt(body.assigned_user_id);
+  if (!assignedUserId) throw httpError(400, "assigned_user_id is required");
   const remarks = optionalString(body.remarks, 500, "remarks");
 
   await withTransaction(async (conn) => {
@@ -207,20 +232,28 @@ export async function assignLeadService(user, idParam, body) {
       throw httpError(409, `Lead is '${lead.status}' and cannot be assigned`);
     }
 
-    const salesUser = await leadModel.getActiveSalesUser(salesUserId, conn);
-    if (!salesUser) throw httpError(400, "sales_user_id must be an active sales team member");
+    const rule = assignmentRuleFor(lead);
+    const target = await leadModel.getActiveUserByRole(assignedUserId, rule.type, conn);
+    if (!target) throw httpError(400, `assigned_user_id must be ${rule.label}. ${rule.hint}`);
 
-    const current = await leadModel.getActiveSalesAssignment(leadId, conn);
-    if (current && current.assigned_user_id === salesUserId) {
-      throw httpError(409, "Lead is already assigned to this sales member");
+    const current = await leadModel.getActiveAssignment(leadId, conn);
+    if (current && current.assigned_user_id === assignedUserId) {
+      throw httpError(409, "Lead is already assigned to this user");
     }
     if (current) await leadModel.closeAssignment(current.lead_assignment_id, conn);
 
     await leadModel.insertAssignment(
-      { lead_id: leadId, assigned_user_id: salesUserId, assigned_by: user.user_id, remarks },
+      {
+        lead_id: leadId,
+        assignment_type: rule.type,
+        assigned_user_id: assignedUserId,
+        assigned_by: user.user_id,
+        remarks,
+      },
       conn,
     );
 
+    // reference status sirf reference leads pe (customer_reference_id sirf unhi mein hota hai)
     if (lead.customer_reference_id) {
       const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
       if (ref && ref.status === "accepted") {
@@ -241,7 +274,7 @@ export async function assignLeadService(user, idParam, body) {
 
     await leadModel.createNotification(
       {
-        user_id: salesUserId,
+        user_id: assignedUserId,
         type: "lead_assigned",
         title: "New lead assigned",
         message: `Lead ${lead.customer_name} (${lead.customer_mobile}) has been assigned to you.`,

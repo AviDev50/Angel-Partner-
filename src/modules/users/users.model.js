@@ -76,3 +76,4 @@ export async function listUsers({ role, status, q, page, limit }) {
 export async function updateUserStatus(id, status, conn = db) {
   await conn.query(`UPDATE users SET status = ? WHERE user_id = ?`, [status, id]);
 }
+
