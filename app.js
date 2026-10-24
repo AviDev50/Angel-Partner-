@@ -5,6 +5,7 @@ import referenceRoutes from "./src/modules/references/references.routes.js";
 import leadRoutes from "./src/modules/leads/leads.routes.js";
 import userRoutes from "./src/modules/users/users.routes.js";
 import unwantedLeadRoutes from "./src/modules/unwanted-leads/unwanted-leads.routes.js";
+import siteVisitRoutes from "./src/modules/site-visits/site-visits.routes.js";
 
 const app = express();
 
@@ -17,6 +18,8 @@ app.use("/api/references", referenceRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/unwanted-leads", unwantedLeadRoutes);
+app.use("/api/site-visits", siteVisitRoutes);
+
 
 // JSON 404
 app.use((req, res) => {
