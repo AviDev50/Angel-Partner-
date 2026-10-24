@@ -52,7 +52,7 @@ export async function registerService(body) {
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  // user + wallet ek transaction mein
+  // user + wallet in one transaction
   const userId = await authModel.createPartner({
     role_id: partnerRole.role_id,
     full_name: String(full_name).trim(),

@@ -8,8 +8,16 @@ import {
 import * as referenceModel from "./references.model.js";
 
 const STATUSES = [
-  "submitted", "under_review", "accepted", "rejected", "assigned_to_sales_team",
-  "in_progress", "site_visit_scheduled", "site_visit_completed", "converted", "closed",
+  "submitted",
+  "under_review",
+  "accepted",
+  "rejected",
+  "assigned_to_sales_team",
+  "in_progress",
+  "site_visit_scheduled",
+  "site_visit_completed",
+  "converted",
+  "closed",
 ];
 
 // admin review ke allowed transitions (aage ke statuses leads module handle karega)
@@ -22,7 +30,8 @@ function optionalString(value, max, field) {
   if (value === undefined || value === null) return null;
   const s = String(value).trim();
   if (!s) return null;
-  if (s.length > max) throw httpError(400, `${field} must be at most ${max} characters`);
+  if (s.length > max)
+    throw httpError(400, `${field} must be at most ${max} characters`);
   return s;
 }
 
@@ -55,7 +64,11 @@ export async function createReferenceService(user, body) {
   if (!customerName) throw httpError(400, "customer_name is required");
 
   const mobile = normalizeMobile(body.customer_mobile);
-  if (!mobile) throw httpError(400, "customer_mobile must be a valid 10-digit mobile number");
+  if (!mobile)
+    throw httpError(
+      400,
+      "customer_mobile must be a valid 10-digit mobile number",
+    );
 
   let email = optionalString(body.customer_email, 190, "customer_email");
   if (email) {
@@ -64,7 +77,11 @@ export async function createReferenceService(user, body) {
   }
 
   let budget = null;
-  if (body.customer_budget !== undefined && body.customer_budget !== null && body.customer_budget !== "") {
+  if (
+    body.customer_budget !== undefined &&
+    body.customer_budget !== null &&
+    body.customer_budget !== ""
+  ) {
     budget = Number(body.customer_budget);
     if (!Number.isFinite(budget) || budget <= 0 || budget >= 1e12) {
       throw httpError(400, "customer_budget must be a positive number");
@@ -78,7 +95,11 @@ export async function createReferenceService(user, body) {
     customer_email: email,
     preferred_bhk: optionalString(body.preferred_bhk, 30, "preferred_bhk"),
     customer_budget: budget,
-    preferred_project_location: optionalString(body.preferred_project_location, 255, "preferred_project_location"),
+    preferred_project_location: optionalString(
+      body.preferred_project_location,
+      255,
+      "preferred_project_location",
+    ),
     remarks: optionalString(body.remarks, 5000, "remarks"),
   };
 
@@ -90,7 +111,9 @@ export async function createReferenceService(user, body) {
       {
         ...data,
         is_potential_duplicate: original ? 1 : 0,
-        duplicate_of_reference_id: original ? original.customer_reference_id : null,
+        duplicate_of_reference_id: original
+          ? original.customer_reference_id
+          : null,
       },
       conn,
     );
@@ -125,7 +148,8 @@ export async function listReferencesService(user, query) {
   const filters = { page, limit };
 
   if (query.status) {
-    if (!STATUSES.includes(query.status)) throw httpError(400, "Invalid status filter");
+    if (!STATUSES.includes(query.status))
+      throw httpError(400, "Invalid status filter");
     filters.status = query.status;
   }
   if (query.q && String(query.q).trim()) filters.q = String(query.q).trim();
@@ -138,7 +162,10 @@ export async function listReferencesService(user, query) {
       if (!pid) throw httpError(400, "Invalid partner_id");
       filters.partnerId = pid;
     }
-    if (query.is_potential_duplicate !== undefined && query.is_potential_duplicate !== "") {
+    if (
+      query.is_potential_duplicate !== undefined &&
+      query.is_potential_duplicate !== ""
+    ) {
       filters.isDuplicate = query.is_potential_duplicate === "true" ? 1 : 0;
     }
   }
@@ -170,7 +197,10 @@ export async function getReferenceService(user, idParam) {
   }
   return {
     ...toPartnerView(ref),
-    status_history: history.map((h) => ({ to_status: h.to_status, created_at: h.created_at })),
+    status_history: history.map((h) => ({
+      to_status: h.to_status,
+      created_at: h.created_at,
+    })),
   };
 }
 
@@ -181,7 +211,10 @@ export async function reviewReferenceService(user, idParam, body) {
 
   const decision = String(body.decision || "").trim();
   if (!["under_review", "accepted", "rejected"].includes(decision)) {
-    throw httpError(400, "decision must be one of: under_review, accepted, rejected");
+    throw httpError(
+      400,
+      "decision must be one of: under_review, accepted, rejected",
+    );
   }
 
   const remarks = optionalString(body.remarks, 500, "remarks");
@@ -196,10 +229,19 @@ export async function reviewReferenceService(user, idParam, body) {
 
     const allowed = REVIEW_TRANSITIONS[ref.status] || [];
     if (!allowed.includes(decision)) {
-      throw httpError(409, `Cannot move reference from '${ref.status}' to '${decision}'`);
+      throw httpError(
+        409,
+        `Cannot move reference from '${ref.status}' to '${decision}'`,
+      );
     }
 
-    await referenceModel.updateReview(id, decision, user.user_id, remarks, conn);
+    await referenceModel.updateReview(
+      id,
+      decision,
+      user.user_id,
+      remarks,
+      conn,
+    );
 
     await referenceModel.addStatusHistory(
       {
@@ -214,7 +256,11 @@ export async function reviewReferenceService(user, idParam, body) {
     );
 
     if (decision === "accepted") {
-      const leadId = await referenceModel.createLeadFromReference(ref, user.user_id, conn);
+      const leadId = await referenceModel.createLeadFromReference(
+        ref,
+        user.user_id,
+        conn,
+      );
       await referenceModel.addStatusHistory(
         {
           entity_type: "lead",
@@ -229,16 +275,31 @@ export async function reviewReferenceService(user, idParam, body) {
     }
 
     const copy = {
-      under_review: ["reference_under_review", "Reference under review",
-        `Your reference ${ref.reference_code} for ${ref.customer_name} is now under review.`],
-      accepted: ["reference_accepted", "Reference accepted",
-        `Your reference ${ref.reference_code} for ${ref.customer_name} has been accepted.`],
-      rejected: ["reference_rejected", "Reference rejected",
-        `Your reference ${ref.reference_code} for ${ref.customer_name} was rejected. Reason: ${remarks}`],
+      under_review: [
+        "reference_under_review",
+        "Reference under review",
+        `Your reference ${ref.reference_code} for ${ref.customer_name} is now under review.`,
+      ],
+      accepted: [
+        "reference_accepted",
+        "Reference accepted",
+        `Your reference ${ref.reference_code} for ${ref.customer_name} has been accepted.`,
+      ],
+      rejected: [
+        "reference_rejected",
+        "Reference rejected",
+        `Your reference ${ref.reference_code} for ${ref.customer_name} was rejected. Reason: ${remarks}`,
+      ],
     }[decision];
 
     await referenceModel.createNotification(
-      { user_id: ref.partner_id, type: copy[0], title: copy[1], message: copy[2], entity_id: id },
+      {
+        user_id: ref.partner_id,
+        type: copy[0],
+        title: copy[1],
+        message: copy[2],
+        entity_id: id,
+      },
       conn,
     );
   });

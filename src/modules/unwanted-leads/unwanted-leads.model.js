@@ -42,7 +42,13 @@ export async function getUnwantedLeadForUpdate(id, conn) {
   return rows[0];
 }
 
-export async function listUnwantedLeads({ partnerId, q, unassigned, page, limit }) {
+export async function listUnwantedLeads({
+  partnerId,
+  q,
+  unassigned,
+  page,
+  limit,
+}) {
   const where = ["ul.deleted_at IS NULL"];
   const params = [];
 
@@ -87,7 +93,13 @@ export async function getActivePartner(userId, conn = db) {
   return rows[0];
 }
 
-export async function assignToPartner(id, partnerId, assignedBy, remarks, conn = db) {
+export async function assignToPartner(
+  id,
+  partnerId,
+  assignedBy,
+  remarks,
+  conn = db,
+) {
   await conn.query(
     `UPDATE unwanted_leads
      SET partner_id = ?, assigned_by = ?, assigned_at = UTC_TIMESTAMP(), assignment_remarks = ?
@@ -100,7 +112,13 @@ export async function addAuditLog(a, conn = db) {
   await conn.query(
     `INSERT INTO audit_logs (user_id, action, entity_typche, entity_id, old_values, new_values)
      VALUES (?, ?, 'unwanted_lead', ?, ?, ?)`,
-    [a.user_id, a.action, a.entity_id, JSON.stringify(a.old_values), JSON.stringify(a.new_values)],
+    [
+      a.user_id,
+      a.action,
+      a.entity_id,
+      JSON.stringify(a.old_values),
+      JSON.stringify(a.new_values),
+    ],
   );
 }
 

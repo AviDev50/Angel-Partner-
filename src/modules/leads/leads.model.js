@@ -35,7 +35,16 @@ export async function getLeadForUpdate(id, conn) {
   return rows[0];
 }
 
-export async function listLeads({ status, leadSource, q, assignedUserId, assignmentType, unassigned, page, limit }) {
+export async function listLeads({
+  status,
+  leadSource,
+  q,
+  assignedUserId,
+  assignmentType,
+  unassigned,
+  page,
+  limit,
+}) {
   const where = ["l.deleted_at IS NULL"];
   const params = [];
 
@@ -83,7 +92,10 @@ export async function listLeads({ status, leadSource, q, assignedUserId, assignm
 }
 
 export async function updateLeadStatus(id, status, conn = db) {
-  await conn.query(`UPDATE leads SET status = ? WHERE lead_id = ?`, [status, id]);
+  await conn.query(`UPDATE leads SET status = ? WHERE lead_id = ?`, [
+    status,
+    id,
+  ]);
 }
 
 // ---------------- assignments
@@ -135,7 +147,13 @@ export async function insertAssignment(data, conn = db) {
     `INSERT INTO lead_assignments
        (lead_id, assignment_type, assigned_user_id, assigned_by, remarks)
      VALUES (?, ?, ?, ?, ?)`,
-    [data.lead_id, data.assignment_type, data.assigned_user_id, data.assigned_by, data.remarks],
+    [
+      data.lead_id,
+      data.assignment_type,
+      data.assigned_user_id,
+      data.assigned_by,
+      data.remarks,
+    ],
   );
   return result.insertId;
 }
@@ -162,7 +180,13 @@ export async function insertFollowUp(data, conn = db) {
     `INSERT INTO follow_up_activities
        (lead_id, performed_by, activity_type, remarks, next_follow_up_at)
      VALUES (?, ?, ?, ?, ?)`,
-    [data.lead_id, data.performed_by, data.activity_type, data.remarks, data.next_follow_up_at],
+    [
+      data.lead_id,
+      data.performed_by,
+      data.activity_type,
+      data.remarks,
+      data.next_follow_up_at,
+    ],
   );
   return result.insertId;
 }

@@ -7,7 +7,13 @@ import * as model from "./site-visits.model.js";
 import * as leadModel from "../leads/leads.model.js";
 import * as referenceModel from "../references/references.model.js";
 
-const VISIT_STATUSES = ["scheduled", "completed", "verified", "rejected", "cancelled"];
+const VISIT_STATUSES = [
+  "scheduled",
+  "completed",
+  "verified",
+  "rejected",
+  "cancelled",
+];
 const LEAD_LOCKED = ["converted", "lost", "closed"];
 const MAX_POINTS = 1000000;
 
@@ -74,7 +80,11 @@ async function lockVisit(user, idParam, conn) {
   if (!lead) throw httpError(404, "Site visit not found");
 
   if (user.role === "sales_team") {
-    const mine = await leadModel.isActiveSalesAssignee(lead.lead_id, user.user_id, conn);
+    const mine = await leadModel.isActiveSalesAssignee(
+      lead.lead_id,
+      user.user_id,
+      conn,
+    );
     if (!mine) throw httpError(404, "Site visit not found");
   }
 
@@ -95,15 +105,25 @@ export async function scheduleSiteVisitService(user, body) {
     if (!lead) throw httpError(404, "Lead not found");
 
     if (user.role === "sales_team") {
-      const mine = await leadModel.isActiveSalesAssignee(leadId, user.user_id, conn);
+      const mine = await leadModel.isActiveSalesAssignee(
+        leadId,
+        user.user_id,
+        conn,
+      );
       if (!mine) throw httpError(404, "Lead not found");
     }
 
     if (LEAD_LOCKED.includes(lead.status)) {
-      throw httpError(409, `Lead is '${lead.status}' and a site visit cannot be scheduled`);
+      throw httpError(
+        409,
+        `Lead is '${lead.status}' and a site visit cannot be scheduled`,
+      );
     }
     if (await model.findOpenVisit(leadId, conn)) {
-      throw httpError(409, "This lead already has an open site visit (scheduled or awaiting verification)");
+      throw httpError(
+        409,
+        "This lead already has an open site visit (scheduled or awaiting verification)",
+      );
     }
 
     const id = await model.insertVisit(
@@ -117,12 +137,37 @@ export async function scheduleSiteVisitService(user, body) {
       conn,
     );
 
-    await visitHistory({ site_visit_id: id }, null, "scheduled", user.user_id, null, conn);
-    await setLeadStatus(lead, "site_visit_scheduled", user.user_id, `Site visit #${id} scheduled`, conn);
+    await visitHistory(
+      { site_visit_id: id },
+      null,
+      "scheduled",
+      user.user_id,
+      null,
+      conn,
+    );
+    await setLeadStatus(
+      lead,
+      "site_visit_scheduled",
+      user.user_id,
+      `Site visit #${id} scheduled`,
+      conn,
+    );
 
-    const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
-    if (ref && !["converted", "closed", "site_visit_scheduled"].includes(ref.status)) {
-      await setReferenceStatus(ref, "site_visit_scheduled", user.user_id, `Site visit #${id} scheduled`, conn);
+    const ref = await referenceModel.getReferenceForUpdate(
+      lead.customer_reference_id,
+      conn,
+    );
+    if (
+      ref &&
+      !["converted", "closed", "site_visit_scheduled"].includes(ref.status)
+    ) {
+      await setReferenceStatus(
+        ref,
+        "site_visit_scheduled",
+        user.user_id,
+        `Site visit #${id} scheduled`,
+        conn,
+      );
     }
 
     return id;
@@ -138,7 +183,8 @@ export async function listSiteVisitsService(user, query) {
   const filters = { page, limit };
 
   if (query.visit_status) {
-    if (!VISIT_STATUSES.includes(query.visit_status)) throw httpError(400, "Invalid status filter");
+    if (!VISIT_STATUSES.includes(query.visit_status))
+      throw httpError(400, "Invalid status filter");
     filters.visitStatus = query.visit_status;
   }
   if (query.lead_id) {
@@ -168,7 +214,10 @@ export async function getSiteVisitService(user, idParam) {
   if (!id) throw httpError(400, "Invalid site visit id");
 
   const visit = await model.getVisitById(id);
-  if (!visit || (user.role === "sales_team" && visit.sales_user_id !== user.user_id)) {
+  if (
+    !visit ||
+    (user.role === "sales_team" && visit.sales_user_id !== user.user_id)
+  ) {
     throw httpError(404, "Site visit not found");
   }
 
@@ -179,21 +228,50 @@ export async function getSiteVisitService(user, idParam) {
 // ---------------------------------------------------------------- complete
 export async function completeSiteVisitService(user, idParam, body) {
   const remarks = optionalString(body.visit_remarks, 5000, "visit_remarks");
-  if (!remarks) throw httpError(400, "visit_remarks (completion details) are required");
+  if (!remarks)
+    throw httpError(400, "visit_remarks (completion details) are required");
 
   const id = await withTransaction(async (conn) => {
     const { lead, visit } = await lockVisit(user, idParam, conn);
     if (visit.visit_status !== "scheduled") {
-      throw httpError(409, `Site visit is '${visit.visit_status}' and cannot be completed`);
+      throw httpError(
+        409,
+        `Site visit is '${visit.visit_status}' and cannot be completed`,
+      );
     }
 
     await model.markCompleted(visit.site_visit_id, remarks, conn);
-    await visitHistory(visit, "scheduled", "completed", user.user_id, remarks, conn);
-    await setLeadStatus(lead, "site_visit_completed", user.user_id, `Site visit #${visit.site_visit_id} submitted for verification`, conn);
+    await visitHistory(
+      visit,
+      "scheduled",
+      "completed",
+      user.user_id,
+      remarks,
+      conn,
+    );
+    await setLeadStatus(
+      lead,
+      "site_visit_completed",
+      user.user_id,
+      `Site visit #${visit.site_visit_id} submitted for verification`,
+      conn,
+    );
 
-    const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
-    if (ref && !["converted", "closed", "site_visit_completed"].includes(ref.status)) {
-      await setReferenceStatus(ref, "site_visit_completed", user.user_id, `Site visit #${visit.site_visit_id} submitted for verification`, conn);
+    const ref = await referenceModel.getReferenceForUpdate(
+      lead.customer_reference_id,
+      conn,
+    );
+    if (
+      ref &&
+      !["converted", "closed", "site_visit_completed"].includes(ref.status)
+    ) {
+      await setReferenceStatus(
+        ref,
+        "site_visit_completed",
+        user.user_id,
+        `Site visit #${visit.site_visit_id} submitted for verification`,
+        conn,
+      );
     }
 
     return visit.site_visit_id;
@@ -208,22 +286,59 @@ export async function cancelSiteVisitService(user, idParam, body) {
   const id = await withTransaction(async (conn) => {
     const { lead, visit } = await lockVisit(user, idParam, conn);
     if (visit.visit_status !== "scheduled") {
-      throw httpError(409, `Site visit is '${visit.visit_status}' and cannot be cancelled`);
+      throw httpError(
+        409,
+        `Site visit is '${visit.visit_status}' and cannot be cancelled`,
+      );
     }
 
     await model.markCancelled(visit.site_visit_id, conn);
-    await visitHistory(visit, "scheduled", "cancelled", user.user_id, remarks, conn);
+    await visitHistory(
+      visit,
+      "scheduled",
+      "cancelled",
+      user.user_id,
+      remarks,
+      conn,
+    );
 
     // lead / reference ko visit schedule hone se pehle wale status pe wapas
     if (lead.status === "site_visit_scheduled") {
-      const prev = await model.getPreviousStatus("lead", lead.lead_id, "site_visit_scheduled", conn);
-      if (prev) await setLeadStatus(lead, prev, user.user_id, `Site visit #${visit.site_visit_id} cancelled`, conn);
+      const prev = await model.getPreviousStatus(
+        "lead",
+        lead.lead_id,
+        "site_visit_scheduled",
+        conn,
+      );
+      if (prev)
+        await setLeadStatus(
+          lead,
+          prev,
+          user.user_id,
+          `Site visit #${visit.site_visit_id} cancelled`,
+          conn,
+        );
     }
 
-    const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
+    const ref = await referenceModel.getReferenceForUpdate(
+      lead.customer_reference_id,
+      conn,
+    );
     if (ref && ref.status === "site_visit_scheduled") {
-      const prev = await model.getPreviousStatus("customer_reference", ref.customer_reference_id, "site_visit_scheduled", conn);
-      if (prev) await setReferenceStatus(ref, prev, user.user_id, `Site visit #${visit.site_visit_id} cancelled`, conn);
+      const prev = await model.getPreviousStatus(
+        "customer_reference",
+        ref.customer_reference_id,
+        "site_visit_scheduled",
+        conn,
+      );
+      if (prev)
+        await setReferenceStatus(
+          ref,
+          prev,
+          user.user_id,
+          `Site visit #${visit.site_visit_id} cancelled`,
+          conn,
+        );
     }
 
     return visit.site_visit_id;
@@ -246,7 +361,10 @@ async function creditPoints(visit, points, remarks, adminId, conn) {
       points,
       balance_after: newBalance,
       reason: remarks
-        ? `Site visit #${visit.site_visit_id} verified: ${remarks}`.slice(0, 500)
+        ? `Site visit #${visit.site_visit_id} verified: ${remarks}`.slice(
+            0,
+            500,
+          )
         : `Site visit #${visit.site_visit_id} verified`,
       performed_by: adminId,
     },
@@ -272,35 +390,63 @@ export async function verifySiteVisitService(user, idParam, body) {
   if (!["verified", "rejected"].includes(decision)) {
     throw httpError(400, "decision must be 'verified' or 'rejected'");
   }
-  const remarks = optionalString(body.verification_remarks, 500, "verification_remarks");
+  const remarks = optionalString(
+    body.verification_remarks,
+    500,
+    "verification_remarks",
+  );
   if (decision === "rejected" && !remarks) {
     throw httpError(400, "verification_remarks are required when rejecting");
   }
 
-  const hasPoints = body.points !== undefined && body.points !== null && body.points !== "";
+  const hasPoints =
+    body.points !== undefined && body.points !== null && body.points !== "";
   let points = null;
   if (decision === "rejected") {
-    if (hasPoints) throw httpError(400, "points are not allowed when rejecting");
+    if (hasPoints)
+      throw httpError(400, "points are not allowed when rejecting");
   } else if (hasPoints) {
     points = parsePositiveInt(body.points);
     if (!points || points > MAX_POINTS) {
-      throw httpError(400, `points must be a positive integer (max ${MAX_POINTS})`);
+      throw httpError(
+        400,
+        `points must be a positive integer (max ${MAX_POINTS})`,
+      );
     }
   }
 
   const id = await withTransaction(async (conn) => {
     const { visit } = await lockVisit(user, idParam, conn);
     if (visit.visit_status !== "completed") {
-      throw httpError(409, `Site visit is '${visit.visit_status}' and cannot be verified`);
+      throw httpError(
+        409,
+        `Site visit is '${visit.visit_status}' and cannot be verified`,
+      );
     }
 
     // partner wali visit verify karte time points dena zaroori hai
     if (decision === "verified" && visit.partner_id && !points) {
-      throw httpError(400, "points are required when verifying this site visit");
+      throw httpError(
+        400,
+        "points are required when verifying this site visit",
+      );
     }
 
-    await model.markVerification(visit.site_visit_id, decision, user.user_id, remarks, conn);
-    await visitHistory(visit, "completed", decision, user.user_id, remarks, conn);
+    await model.markVerification(
+      visit.site_visit_id,
+      decision,
+      user.user_id,
+      remarks,
+      conn,
+    );
+    await visitHistory(
+      visit,
+      "completed",
+      decision,
+      user.user_id,
+      remarks,
+      conn,
+    );
 
     if (decision === "verified" && visit.partner_id) {
       await creditPoints(visit, points, remarks, user.user_id, conn);

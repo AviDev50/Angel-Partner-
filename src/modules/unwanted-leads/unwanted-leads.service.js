@@ -1,7 +1,10 @@
 import { withTransaction } from "../../config/db.js";
 import { httpError } from "../../utils/httpError.js";
 import { parsePositiveInt } from "../../utils/validators.js";
-import { parseCustomerFields, optionalString } from "../../utils/customerFields.js";
+import {
+  parseCustomerFields,
+  optionalString,
+} from "../../utils/customerFields.js";
 import * as model from "./unwanted-leads.model.js";
 
 // partner ko sirf customer details; admin/assignment internals nahi
@@ -27,7 +30,10 @@ function viewFor(user, lead) {
 
 export async function createUnwantedLeadService(user, body) {
   const fields = parseCustomerFields(body);
-  const id = await model.insertUnwantedLead({ ...fields, created_by: user.user_id });
+  const id = await model.insertUnwantedLead({
+    ...fields,
+    created_by: user.user_id,
+  });
   return model.getUnwantedLeadById(id);
 }
 

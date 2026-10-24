@@ -83,7 +83,8 @@ export async function createPartner(data) {
 }
 
 export async function updateLastLogin(userId) {
-  await db.query(`UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE user_id = ?`, [
-    userId,
-  ]);
+  await db.query(
+    `UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE user_id = ?`,
+    [userId],
+  );
 }

@@ -76,7 +76,14 @@ export async function getReferenceForUpdate(id, conn) {
   return rows[0];
 }
 
-export async function listReferences({ partnerId, status, q, isDuplicate, page, limit }) {
+export async function listReferences({
+  partnerId,
+  status,
+  q,
+  isDuplicate,
+  page,
+  limit,
+}) {
   const where = ["r.deleted_at IS NULL"];
   const params = [];
 
@@ -93,7 +100,9 @@ export async function listReferences({ partnerId, status, q, isDuplicate, page, 
     params.push(isDuplicate);
   }
   if (q) {
-    where.push("(r.customer_name LIKE ? OR r.customer_mobile LIKE ? OR r.reference_code LIKE ?)");
+    where.push(
+      "(r.customer_name LIKE ? OR r.customer_mobile LIKE ? OR r.reference_code LIKE ?)",
+    );
     const like = `%${q}%`;
     params.push(like, like, like);
   }
@@ -154,7 +163,14 @@ export async function addStatusHistory(h, conn = db) {
     `INSERT INTO status_histories
        (entity_type, entity_id, from_status, to_status, changed_by, remarks)
      VALUES (?, ?, ?, ?, ?, ?)`,
-    [h.entity_type, h.entity_id, h.from_status, h.to_status, h.changed_by, h.remarks],
+    [
+      h.entity_type,
+      h.entity_id,
+      h.from_status,
+      h.to_status,
+      h.changed_by,
+      h.remarks,
+    ],
   );
 }
 

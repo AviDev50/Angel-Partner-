@@ -2,7 +2,12 @@ import { httpError } from "../../utils/httpError.js";
 import { parsePositiveInt } from "../../utils/validators.js";
 import * as model from "./wallet.model.js";
 
-const TYPES = ["site_visit_credit", "redemption_debit", "reversal", "correction"];
+const TYPES = [
+  "site_visit_credit",
+  "redemption_debit",
+  "reversal",
+  "correction",
+];
 
 async function summary(partnerId) {
   const wallet = await model.getWallet(partnerId);
@@ -23,10 +28,14 @@ export async function getPartnerWalletService(idParam) {
   if (!partnerId) throw httpError(400, "Invalid partner id");
   const partner = await model.getPartner(partnerId);
   if (!partner) throw httpError(404, "Partner not found");
-  return { partner_id: partner.user_id, partner_name: partner.full_name, ...(await summary(partnerId)) };
+  return {
+    partner_id: partner.user_id,
+    partner_name: partner.full_name,
+    ...(await summary(partnerId)),
+  };
 }
 
-// partner ko admin ka naam / partner info nahi dikhana
+// we not give admin name and info to partner
 function viewFor(user, row) {
   if (user.role === "admin") return row;
   const { performed_by_name, partner_name, partner_id, ...rest } = row;
@@ -39,7 +48,8 @@ export async function listTransactionsService(user, query) {
   const filters = { page, limit };
 
   if (query.transaction_type) {
-    if (!TYPES.includes(query.transaction_type)) throw httpError(400, "Invalid transaction_type filter");
+    if (!TYPES.includes(query.transaction_type))
+      throw httpError(400, "Invalid transaction_type filter");
     filters.type = query.transaction_type;
   }
   if (query.partner_id) {

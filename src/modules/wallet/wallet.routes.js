@@ -17,6 +17,10 @@ router.get("/me/transactions", authorize("partner"), listMyTransactions);
 
 router.get("/transactions", authorize("admin"), listAllTransactions);
 router.get("/partners/:partnerId", authorize("admin"), getPartnerWallet);
-router.get("/partners/:partnerId/transactions", authorize("admin"), listPartnerTransactions);
+router.get(
+  "/partners/:partnerId/transactions",
+  authorize("admin"),
+  listPartnerTransactions,
+);
 
 export default router;

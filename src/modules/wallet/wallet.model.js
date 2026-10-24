@@ -30,7 +30,10 @@ export async function getTotals(partnerId, conn = db) {
   return rows[0];
 }
 
-export async function listTransactions({ partnerId, type, page, limit }, conn = db) {
+export async function listTransactions(
+  { partnerId, type, page, limit },
+  conn = db,
+) {
   const where = ["pt.deleted_at IS NULL"];
   const params = [];
   if (partnerId) {

@@ -16,7 +16,11 @@ router.use(authenticate);
 router.post("/", authorize("admin", "sales_team"), scheduleSiteVisit);
 router.get("/", authorize("admin", "sales_team"), listSiteVisits);
 router.get("/:id", authorize("admin", "sales_team"), getSiteVisit);
-router.patch("/:id/complete", authorize("admin", "sales_team"), completeSiteVisit);
+router.patch(
+  "/:id/complete",
+  authorize("admin", "sales_team"),
+  completeSiteVisit,
+);
 router.patch("/:id/cancel", authorize("admin", "sales_team"), cancelSiteVisit);
 router.patch("/:id/verify", authorize("admin"), verifySiteVisit);
 

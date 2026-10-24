@@ -56,7 +56,13 @@ export async function insertVisit(data, conn = db) {
   const [result] = await conn.query(
     `INSERT INTO site_visits (lead_id, partner_id, scheduled_by, project_name, scheduled_at)
      VALUES (?, ?, ?, ?, ?)`,
-    [data.lead_id, data.partner_id, data.scheduled_by, data.project_name, data.scheduled_at],
+    [
+      data.lead_id,
+      data.partner_id,
+      data.scheduled_by,
+      data.project_name,
+      data.scheduled_at,
+    ],
   );
   return result.insertId;
 }
@@ -71,10 +77,19 @@ export async function markCompleted(id, remarks, conn = db) {
 }
 
 export async function markCancelled(id, conn = db) {
-  await conn.query(`UPDATE site_visits SET visit_status = 'cancelled' WHERE site_visit_id = ?`, [id]);
+  await conn.query(
+    `UPDATE site_visits SET visit_status = 'cancelled' WHERE site_visit_id = ?`,
+    [id],
+  );
 }
 
-export async function markVerification(id, status, verifierId, remarks, conn = db) {
+export async function markVerification(
+  id,
+  status,
+  verifierId,
+  remarks,
+  conn = db,
+) {
   await conn.query(
     `UPDATE site_visits
      SET visit_status = ?, verified_by = ?, verified_at = UTC_TIMESTAMP(), verification_remarks = ?
@@ -83,7 +98,14 @@ export async function markVerification(id, status, verifierId, remarks, conn = d
   );
 }
 
-export async function listVisits({ visitStatus, leadId, partnerId, salesUserId, page, limit }) {
+export async function listVisits({
+  visitStatus,
+  leadId,
+  partnerId,
+  salesUserId,
+  page,
+  limit,
+}) {
   const where = ["sv.deleted_at IS NULL"];
   const params = [];
 
@@ -136,7 +158,12 @@ export async function getStatusHistory(visitId, conn = db) {
 }
 
 // cancel pe "pehle ka status" nikalne ke liye
-export async function getPreviousStatus(entityType, entityId, toStatus, conn = db) {
+export async function getPreviousStatus(
+  entityType,
+  entityId,
+  toStatus,
+  conn = db,
+) {
   const [rows] = await conn.query(
     `SELECT from_status FROM status_histories
      WHERE entity_type = ? AND entity_id = ? AND to_status = ? AND deleted_at IS NULL
@@ -148,7 +175,10 @@ export async function getPreviousStatus(entityType, entityId, toStatus, conn = d
 }
 
 export async function ensureWallet(partnerId, conn = db) {
-  await conn.query(`INSERT IGNORE INTO partner_wallets (partner_id) VALUES (?)`, [partnerId]);
+  await conn.query(
+    `INSERT IGNORE INTO partner_wallets (partner_id) VALUES (?)`,
+    [partnerId],
+  );
 }
 
 export async function getWalletForUpdate(partnerId, conn) {
@@ -161,10 +191,10 @@ export async function getWalletForUpdate(partnerId, conn) {
 }
 
 export async function setWalletBalance(walletId, balance, conn = db) {
-  await conn.query(`UPDATE partner_wallets SET points_balance = ? WHERE partner_wallet_id = ?`, [
-    balance,
-    walletId,
-  ]);
+  await conn.query(
+    `UPDATE partner_wallets SET points_balance = ? WHERE partner_wallet_id = ?`,
+    [balance, walletId],
+  );
 }
 
 export async function insertPointsCredit(data, conn = db) {
@@ -173,7 +203,14 @@ export async function insertPointsCredit(data, conn = db) {
       `INSERT INTO points_transactions
          (partner_id, site_visit_id, transaction_type, points, balance_after, reason, performed_by)
        VALUES (?, ?, 'site_visit_credit', ?, ?, ?, ?)`,
-      [data.partner_id, data.site_visit_id, data.points, data.balance_after, data.reason, data.performed_by],
+      [
+        data.partner_id,
+        data.site_visit_id,
+        data.points,
+        data.balance_after,
+        data.reason,
+        data.performed_by,
+      ],
     );
   } catch (err) {
     // uq_pt_one_credit_per_visit: ek visit pe ek hi credit

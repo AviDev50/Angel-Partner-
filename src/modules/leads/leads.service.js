@@ -6,12 +6,25 @@ import * as leadModel from "./leads.model.js";
 import * as referenceModel from "../references/references.model.js";
 
 const LEAD_STATUSES = [
-  "new", "contacted", "follow_up_required", "site_visit_scheduled", "site_visit_completed",
-  "booking_in_progress", "converted", "lost", "closed",
+  "new",
+  "contacted",
+  "follow_up_required",
+  "site_visit_scheduled",
+  "site_visit_completed",
+  "booking_in_progress",
+  "converted",
+  "lost",
+  "closed",
 ];
 
 // site_visit_* aur converted baaki modules (site visits / bookings) set karenge
-const MANUAL_STATUSES = ["contacted", "follow_up_required", "booking_in_progress", "lost", "closed"];
+const MANUAL_STATUSES = [
+  "contacted",
+  "follow_up_required",
+  "booking_in_progress",
+  "lost",
+  "closed",
+];
 
 // Terminal: inke baad na status badlega na reassign hoga
 const LOCKED_STATUSES = ["converted", "lost", "closed"];
@@ -30,7 +43,11 @@ function nextReferenceStatus(refStatus, leadStatus) {
   if (!target || refStatus === target) return null;
   if (["converted", "closed"].includes(refStatus)) return null;
   // reference aage badh chuka ho (site visit etc.) to peeche mat le jao
-  if (target === "in_progress" && !["accepted", "assigned_to_sales_team"].includes(refStatus)) return null;
+  if (
+    target === "in_progress" &&
+    !["accepted", "assigned_to_sales_team"].includes(refStatus)
+  )
+    return null;
   return target;
 }
 
@@ -48,7 +65,9 @@ async function loadAccessibleLead(user, idParam) {
 
   const lead = await leadModel.getLeadById(leadId);
   const isMine =
-    lead && lead.assignment_type === "sales_team" && lead.assigned_user_id === user.user_id;
+    lead &&
+    lead.assignment_type === "sales_team" &&
+    lead.assigned_user_id === user.user_id;
   if (!lead || (user.role !== "admin" && !isMine)) {
     throw httpError(404, "Lead not found");
   }
@@ -62,7 +81,8 @@ export async function listLeadsService(user, query) {
   const filters = { page, limit };
 
   if (query.status) {
-    if (!LEAD_STATUSES.includes(query.status)) throw httpError(400, "Invalid status filter");
+    if (!LEAD_STATUSES.includes(query.status))
+      throw httpError(400, "Invalid status filter");
     filters.status = query.status;
   }
   if (query.q && String(query.q).trim()) filters.q = String(query.q).trim();
@@ -94,7 +114,9 @@ export async function getLeadService(user, idParam) {
 
   const data = { ...viewFor(user, lead), status_history: statusHistory };
   if (user.role === "admin") {
-    data.assignment_history = await leadModel.getAssignmentHistory(lead.lead_id);
+    data.assignment_history = await leadModel.getAssignmentHistory(
+      lead.lead_id,
+    );
   }
   return data;
 }
@@ -107,25 +129,37 @@ export async function updateLeadStatusService(user, idParam, body) {
   const status = String(body.status || "").trim();
   if (!LEAD_STATUSES.includes(status)) throw httpError(400, "Invalid status");
   if (!MANUAL_STATUSES.includes(status)) {
-    throw httpError(400, `Status '${status}' is set automatically by the site visit / booking flow`);
+    throw httpError(
+      400,
+      `Status '${status}' is set automatically by the site visit / booking flow`,
+    );
   }
 
   const remarks = optionalString(body.remarks, 500, "remarks");
-  if (status === "lost" && !remarks) throw httpError(400, "remarks are required when marking a lead as lost");
+  if (status === "lost" && !remarks)
+    throw httpError(400, "remarks are required when marking a lead as lost");
 
   await withTransaction(async (conn) => {
     const lead = await leadModel.getLeadForUpdate(leadId, conn);
     if (!lead) throw httpError(404, "Lead not found");
 
     if (user.role === "sales_team") {
-      const mine = await leadModel.isActiveSalesAssignee(leadId, user.user_id, conn);
+      const mine = await leadModel.isActiveSalesAssignee(
+        leadId,
+        user.user_id,
+        conn,
+      );
       if (!mine) throw httpError(404, "Lead not found");
     }
 
     if (LOCKED_STATUSES.includes(lead.status)) {
-      throw httpError(409, `Lead is '${lead.status}' and can no longer be changed`);
+      throw httpError(
+        409,
+        `Lead is '${lead.status}' and can no longer be changed`,
+      );
     }
-    if (lead.status === status) throw httpError(409, `Lead is already '${status}'`);
+    if (lead.status === status)
+      throw httpError(409, `Lead is already '${status}'`);
 
     await leadModel.updateLeadStatus(leadId, status, conn);
     await referenceModel.addStatusHistory(
@@ -141,7 +175,10 @@ export async function updateLeadStatusService(user, idParam, body) {
     );
 
     // partner reference ke saath status sync
-    const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
+    const ref = await referenceModel.getReferenceForUpdate(
+      lead.customer_reference_id,
+      conn,
+    );
     const next = ref && nextReferenceStatus(ref.status, status);
     if (next) {
       await referenceModel.updateStatus(ref.customer_reference_id, next, conn);
@@ -179,14 +216,23 @@ export async function assignLeadService(user, idParam, body) {
       throw httpError(409, `Lead is '${lead.status}' and cannot be assigned`);
     }
 
-    const target = await leadModel.getActiveUserByRole(assignedUserId, "sales_team", conn);
-    if (!target) throw httpError(400, "assigned_user_id must be an active sales team member");
+    const target = await leadModel.getActiveUserByRole(
+      assignedUserId,
+      "sales_team",
+      conn,
+    );
+    if (!target)
+      throw httpError(
+        400,
+        "assigned_user_id must be an active sales team member",
+      );
 
     const current = await leadModel.getActiveAssignment(leadId, conn);
     if (current && current.assigned_user_id === assignedUserId) {
       throw httpError(409, "Lead is already assigned to this user");
     }
-    if (current) await leadModel.closeAssignment(current.lead_assignment_id, conn);
+    if (current)
+      await leadModel.closeAssignment(current.lead_assignment_id, conn);
 
     await leadModel.insertAssignment(
       {
@@ -199,9 +245,16 @@ export async function assignLeadService(user, idParam, body) {
       conn,
     );
 
-    const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
+    const ref = await referenceModel.getReferenceForUpdate(
+      lead.customer_reference_id,
+      conn,
+    );
     if (ref && ref.status === "accepted") {
-      await referenceModel.updateStatus(ref.customer_reference_id, "assigned_to_sales_team", conn);
+      await referenceModel.updateStatus(
+        ref.customer_reference_id,
+        "assigned_to_sales_team",
+        conn,
+      );
       await referenceModel.addStatusHistory(
         {
           entity_type: "customer_reference",
@@ -253,11 +306,16 @@ export async function addFollowUpService(user, idParam, body) {
     const raw = String(body.next_follow_up_at).trim();
     // timezone ke bina parse karne pe server ka local time lag jata hai, isliye offset mandatory
     if (!/(Z|[+-]\d{2}:\d{2})$/.test(raw)) {
-      throw httpError(400, "next_follow_up_at must be ISO-8601 with timezone, e.g. 2026-10-25T11:30:00+05:30");
+      throw httpError(
+        400,
+        "next_follow_up_at must be ISO-8601 with timezone, e.g. 2026-10-25T11:30:00+05:30",
+      );
     }
     const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) throw httpError(400, "next_follow_up_at is invalid");
-    if (d.getTime() <= Date.now()) throw httpError(400, "next_follow_up_at must be in the future");
+    if (Number.isNaN(d.getTime()))
+      throw httpError(400, "next_follow_up_at is invalid");
+    if (d.getTime() <= Date.now())
+      throw httpError(400, "next_follow_up_at must be in the future");
     nextFollowUpAt = d; // db.js timezone "Z" => UTC mein store hoga
   }
 
