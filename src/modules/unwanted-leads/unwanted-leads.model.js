@@ -110,7 +110,7 @@ export async function assignToPartner(
 
 export async function addAuditLog(a, conn = db) {
   await conn.query(
-    `INSERT INTO audit_logs (user_id, action, entity_typche, entity_id, old_values, new_values)
+    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values)
      VALUES (?, ?, 'unwanted_lead', ?, ?, ?)`,
     [
       a.user_id,
