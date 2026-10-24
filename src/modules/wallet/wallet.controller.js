@@ -10,25 +10,19 @@ const handle = (fn) => async (req, res) => {
   }
 };
 
-export const getMyWallet = handle((req) =>
-  service.getWalletService(req.user.user_id),
-);
+export const getMyWallet = handle((req) => service.getWalletService(req.user.user_id));
 export const listMyTransactions = handle((req) =>
-  service.listTransactionsService(req.user, {
-    ...req.query,
-    partner_id: req.user.user_id,
-  }),
+  service.listTransactionsService(req.user, { ...req.query, partner_id: req.user.user_id }),
 );
-export const getPartnerWallet = handle((req) =>
-  service.getPartnerWalletService(req.params.partnerId),
+export const listMyCommissions = handle((req) =>
+  service.listCommissionsService(req.user, { ...req.query, partner_id: req.user.user_id }),
 );
+
+export const getPartnerWallet = handle((req) => service.getPartnerWalletService(req.params.partnerId));
 export const listPartnerTransactions = handle((req) =>
-  service.listPartnerTransactionsService(
-    req.user,
-    req.params.partnerId,
-    req.query,
-  ),
+  service.listPartnerTransactionsService(req.user, req.params.partnerId, req.query),
 );
-export const listAllTransactions = handle((req) =>
-  service.listTransactionsService(req.user, req.query),
+export const listPartnerCommissions = handle((req) =>
+  service.listPartnerCommissionsService(req.user, req.params.partnerId, req.query),
 );
+export const listAllTransactions = handle((req) => service.listTransactionsService(req.user, req.query));

@@ -349,9 +349,9 @@ export async function cancelSiteVisitService(user, idParam, body) {
 
 // ---------------------------------------------------------------- verify (admin) + points credit
 // ---------------------------------------------------------------- verify (admin) + custom points credit
-async function creditPoints(visit, points, remarks, adminId, conn) {
+async function creditPoints(visit, points, adminId, conn) {
   await model.ensureWallet(visit.partner_id, conn);
-  const wallet = await model.getWalletForUpdate(visit.partner_id, conn); // row lock
+  const wallet = await model.getWalletForUpdate(visit.partner_id, conn);
   const newBalance = wallet.points_balance + points;
 
   await model.insertPointsCredit(
@@ -360,12 +360,7 @@ async function creditPoints(visit, points, remarks, adminId, conn) {
       site_visit_id: visit.site_visit_id,
       points,
       balance_after: newBalance,
-      reason: remarks
-        ? `Site visit #${visit.site_visit_id} verified: ${remarks}`.slice(
-            0,
-            500,
-          )
-        : `Site visit #${visit.site_visit_id} verified`,
+      reason: `Site visit #${visit.site_visit_id} verified`,
       performed_by: adminId,
     },
     conn,
@@ -449,7 +444,7 @@ export async function verifySiteVisitService(user, idParam, body) {
     );
 
     if (decision === "verified" && visit.partner_id) {
-      await creditPoints(visit, points, remarks, user.user_id, conn);
+      await creditPoints(visit, points, user.user_id, conn);
     }
 
     return visit.site_visit_id;

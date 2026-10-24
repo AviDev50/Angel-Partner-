@@ -2,8 +2,10 @@ import express from "express";
 import {
   getMyWallet,
   listMyTransactions,
+  listMyCommissions,
   getPartnerWallet,
   listPartnerTransactions,
+  listPartnerCommissions,
   listAllTransactions,
 } from "./wallet.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
@@ -14,13 +16,11 @@ router.use(authenticate);
 
 router.get("/me", authorize("partner"), getMyWallet);
 router.get("/me/transactions", authorize("partner"), listMyTransactions);
+router.get("/me/commissions", authorize("partner"), listMyCommissions);
 
 router.get("/transactions", authorize("admin"), listAllTransactions);
 router.get("/partners/:partnerId", authorize("admin"), getPartnerWallet);
-router.get(
-  "/partners/:partnerId/transactions",
-  authorize("admin"),
-  listPartnerTransactions,
-);
+router.get("/partners/:partnerId/transactions", authorize("admin"), listPartnerTransactions);
+router.get("/partners/:partnerId/commissions", authorize("admin"), listPartnerCommissions);
 
 export default router;
