@@ -6,6 +6,7 @@ import leadRoutes from "./src/modules/leads/leads.routes.js";
 import userRoutes from "./src/modules/users/users.routes.js";
 import unwantedLeadRoutes from "./src/modules/unwanted-leads/unwanted-leads.routes.js";
 import siteVisitRoutes from "./src/modules/site-visits/site-visits.routes.js";
+import walletRoutes from "./src/modules/wallet/wallet.routes.js";
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use("/api/leads", leadRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/unwanted-leads", unwantedLeadRoutes);
 app.use("/api/site-visits", siteVisitRoutes);
+app.use("/api/wallet", walletRoutes);
 
 
 // JSON 404
