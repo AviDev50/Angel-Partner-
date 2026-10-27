@@ -107,6 +107,14 @@ export async function deleteSentService(idParam) {
   await withTransaction(async (conn) => {
     const a = await model.getAnnouncementForUpdate(id, conn);
     if (!a) throw httpError(404, "Sent notification not found");
-    await model.softDeleteAnnouncement(id, conn);
+   await model.hardDeleteAnnouncement(id,conn);
   });
+}
+
+export async function deleteMineService(user, idParam) {
+  const id = parsePositiveInt(idParam);
+  if (!id) throw httpError(400, "Invalid notification id");
+
+  const deleted = await model.deleteForUser(id, user.user_id);
+  if (!deleted) throw httpError(404, "Notification not found");
 }

@@ -24,5 +24,6 @@ router.get("/", authorize("partner"), listMine);
 router.get("/unread-count", authorize("partner"), unreadCount);
 router.patch("/read-all", authorize("partner"), markAllRead);
 router.patch("/:id/read", authorize("partner"), markRead);
+router.delete("/:id", authorize("partner"), deleteMine);
 
 export default router;

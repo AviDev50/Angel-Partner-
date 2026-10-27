@@ -64,3 +64,12 @@ export async function deleteSent(req, res) {
     sendError(res, error);
   }
 }
+
+export async function deleteMine(req, res) {
+  try {
+    await service.deleteMineService(req.user, req.params.id);
+    res.status(200).json({ success: true, message: "Notification deleted" });
+  } catch (error) {
+    sendError(res, error);
+  }
+}

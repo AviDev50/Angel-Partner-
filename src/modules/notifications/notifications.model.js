@@ -89,14 +89,10 @@ export async function getAnnouncementForUpdate(id, conn) {
   return rows[0];
 }
 
-// announcement + uski saari notifications soft delete
-export async function softDeleteAnnouncement(id, conn = db) {
-  await conn.query(`UPDATE announcements SET deleted_at = UTC_TIMESTAMP() WHERE announcement_id = ?`, [id]);
-  await conn.query(
-    `UPDATE notifications SET deleted_at = UTC_TIMESTAMP()
-     WHERE announcement_id = ? AND deleted_at IS NULL`,
-    [id],
-  );
+// announcement + uski saari notifications permanently delete
+export async function hardDeleteAnnouncement(id, conn = db) {
+  await conn.query(`DELETE FROM notifications WHERE announcement_id = ?`, [id]);
+  await conn.query(`DELETE FROM announcements WHERE announcement_id = ?`, [id]);
 }
 
 export async function listAnnouncements({ page, limit }) {
@@ -116,4 +112,12 @@ export async function listAnnouncements({ page, limit }) {
   );
   const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM announcements WHERE deleted_at IS NULL`);
   return { rows, total };
+}
+
+export async function deleteForUser(id, userId) {
+  const [res] = await db.query(
+    `DELETE FROM notifications WHERE notification_id = ? AND user_id = ?`,
+    [id, userId],
+  );
+  return res.affectedRows;
 }
