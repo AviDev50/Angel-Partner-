@@ -4,6 +4,7 @@ import { parsePositiveInt } from "../../utils/validators.js";
 import { optionalString } from "../../utils/customerFields.js";
 import * as leadModel from "./leads.model.js";
 import * as referenceModel from "../references/references.model.js";
+import { notifyPartner, NOTIFY } from "../../utils/notify.js";
 
 const LEAD_STATUSES = [
   "new",
@@ -277,8 +278,7 @@ export async function assignLeadService(user, idParam, body) {
         },
         conn,
       );
-    }
-await notifyPartner(conn, {
+      await notifyPartner(conn, {
   partnerId: ref.partner_id,
   type: NOTIFY.LEAD_ASSIGNED,
   title: "Lead assigned",
@@ -286,6 +286,8 @@ await notifyPartner(conn, {
   entityType: "customer_reference",
   entityId: ref.customer_reference_id,
 });
+    }
+
   });
 
   return getLeadService(user, leadId);
