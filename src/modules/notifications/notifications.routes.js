@@ -7,6 +7,7 @@ import {
   sendNotification,
   listSent,
   deleteSent,
+  deleteMine,
 } from "./notifications.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
 
