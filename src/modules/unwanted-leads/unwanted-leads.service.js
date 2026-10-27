@@ -108,16 +108,14 @@ export async function assignUnwantedLeadService(user, idParam, body) {
       conn,
     );
 
-    await model.createNotification(
-      {
-        user_id: partnerId,
-        type: "unwanted_lead_assigned",
-        title: "New lead assigned",
-        message: `Lead ${lead.customer_name} (${lead.customer_mobile}) has been assigned to you.`,
-        entity_id: id,
-      },
-      conn,
-    );
+await notifyPartner(conn, {
+  partnerId,
+  type: NOTIFY.UNWANTED_LEAD_ASSIGNED,
+  title: "New lead assigned",
+  message: `Lead ${lead.customer_name} (${lead.customer_mobile}) has been assigned to you.`,
+  entityType: "unwanted_lead",
+  entityId: id,
+});
   });
 
   return model.getUnwantedLeadById(id);

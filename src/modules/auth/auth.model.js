@@ -1,4 +1,5 @@
 import db from "../../config/db.js";
+import { notifyPartner, NOTIFY } from "../../utils/notify.js";
 
 export async function getUserByEmail(email) {
   const [rows] = await db.query(
@@ -66,6 +67,13 @@ export async function createPartner(data) {
     await conn.query(`INSERT INTO partner_wallets (partner_id) VALUES (?)`, [
       result.insertId,
     ]);
+
+    await notifyPartner(conn, {
+  partnerId: result.insertId,
+  type: NOTIFY.REGISTRATION,
+  title: "Welcome to Angel Partner",
+  message: `Welcome ${data.full_name}! Your registration was successful.`,
+});
 
     await conn.commit();
     return result.insertId;

@@ -82,17 +82,14 @@ export async function createRedemptionService(user, body) {
       conn,
     );
 
-    await walletModel.createNotification(
-      {
-        user_id: partnerId,
-        type: "points_withdrawn",
-        title: "Points withdrawn",
-        message: `${points} points were deducted for a withdrawal.`,
-        entity_type: "redemption",
-        entity_id: redemptionId,
-      },
-      conn,
-    );
+  await notifyPartner(conn, {
+  partnerId,
+  type: NOTIFY.POINTS_WITHDRAWN,
+  title: "Points withdrawn",
+  message: `${points} points were deducted for a withdrawal.`,
+  entityType: "redemption",
+  entityId: redemptionId,
+});
 
     return redemptionId;
   });

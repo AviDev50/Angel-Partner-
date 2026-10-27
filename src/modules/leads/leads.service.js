@@ -193,6 +193,17 @@ export async function updateLeadStatusService(user, idParam, body) {
         },
         conn,
       );
+      await notifyPartner(conn, {
+  partnerId: ref.partner_id,
+  type: NOTIFY.REFERENCE_STATUS_UPDATED,
+  title: "Reference status updated",
+  message:
+    next === "closed"
+      ? `Your reference ${ref.reference_code} for ${ref.customer_name} has been closed.`
+      : `Your reference ${ref.reference_code} for ${ref.customer_name} is now in progress.`,
+  entityType: "customer_reference",
+  entityId: ref.customer_reference_id,
+});
     }
   });
 
@@ -267,18 +278,14 @@ export async function assignLeadService(user, idParam, body) {
         conn,
       );
     }
-
-    await leadModel.createNotification(
-      {
-        user_id: assignedUserId,
-        type: "lead_assigned",
-        title: "New lead assigned",
-        message: `Lead ${lead.customer_name} (${lead.customer_mobile}) has been assigned to you.`,
-        entity_type: "lead",
-        entity_id: leadId,
-      },
-      conn,
-    );
+await notifyPartner(conn, {
+  partnerId: ref.partner_id,
+  type: NOTIFY.LEAD_ASSIGNED,
+  title: "Lead assigned",
+  message: `Your reference ${ref.reference_code} has been assigned to our sales team.`,
+  entityType: "customer_reference",
+  entityId: ref.customer_reference_id,
+});
   });
 
   return getLeadService(user, leadId);

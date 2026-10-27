@@ -5,6 +5,7 @@ import { optionalString } from "../../utils/customerFields.js";
 import { parseDateOnly } from "../../utils/dateOnly.js";
 import * as model from "./commissions.model.js";
 import * as referenceModel from "../references/references.model.js";
+import { notifyPartner, NOTIFY } from "../../utils/notify.js";
 
 const COMMISSION_STATUSES = [
   "pending_eligibility",

@@ -6,6 +6,7 @@ import {
   parsePositiveInt,
 } from "../../utils/validators.js";
 import * as referenceModel from "./references.model.js";
+import { notifyPartner, NOTIFY } from "../../utils/notify.js";
 
 const STATUSES = [
   "submitted",
@@ -132,6 +133,15 @@ export async function createReferenceService(user, body) {
       },
       conn,
     );
+
+    await notifyPartner(conn, {
+  partnerId: user.user_id,
+  type: NOTIFY.REFERENCE_SUBMITTED,
+  title: "Reference submitted",
+  message: `Your reference ${code} for ${customerName} has been submitted.`,
+  entityType: "customer_reference",
+  entityId: id,
+});
 
     return id;
   });
@@ -292,16 +302,14 @@ export async function reviewReferenceService(user, idParam, body) {
       ],
     }[decision];
 
-    await referenceModel.createNotification(
-      {
-        user_id: ref.partner_id,
-        type: copy[0],
-        title: copy[1],
-        message: copy[2],
-        entity_id: id,
-      },
-      conn,
-    );
+   await notifyPartner(conn, {
+  partnerId: ref.partner_id,
+  type: copy[0],
+  title: copy[1],
+  message: copy[2],
+  entityType: "customer_reference",
+  entityId: id,
+});
   });
 
   const ref = await referenceModel.getReferenceById(id);

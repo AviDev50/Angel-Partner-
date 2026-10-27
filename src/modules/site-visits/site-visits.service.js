@@ -6,6 +6,7 @@ import { parseFutureDateTime } from "../../utils/dates.js";
 import * as model from "./site-visits.model.js";
 import * as leadModel from "../leads/leads.model.js";
 import * as referenceModel from "../references/references.model.js";
+import { notifyPartner, NOTIFY } from "../../utils/notify.js";
 
 const VISIT_STATUSES = [
   "scheduled",
@@ -169,6 +170,16 @@ export async function scheduleSiteVisitService(user, body) {
         conn,
       );
     }
+    if (lead.source_partner_id) {
+  await notifyPartner(conn, {
+    partnerId: lead.source_partner_id,
+    type: NOTIFY.SITE_VISIT_SCHEDULED,
+    title: "Site visit scheduled",
+    message: `A site visit has been scheduled for ${lead.customer_name}${projectName ? ` at ${projectName}` : ""} on ${formatIST(scheduledAt)}.`,
+    entityType: "site_visit",
+    entityId: id,
+  });
+}
 
     return id;
   });
@@ -340,6 +351,16 @@ export async function cancelSiteVisitService(user, idParam, body) {
           conn,
         );
     }
+    if (visit.partner_id) {
+  await notifyPartner(conn, {
+    partnerId: visit.partner_id,
+    type: NOTIFY.SITE_VISIT_CANCELLED,
+    title: "Site visit cancelled",
+    message: `The site visit for ${lead.customer_name} has been cancelled.`,
+    entityType: "site_visit",
+    entityId: visit.site_visit_id,
+  });
+}
 
     return visit.site_visit_id;
   });
@@ -367,17 +388,14 @@ async function creditPoints(visit, points, adminId, conn) {
   );
   await model.setWalletBalance(wallet.partner_wallet_id, newBalance, conn);
 
-  await model.createNotification(
-    {
-      user_id: visit.partner_id,
-      type: "point_credited",
-      title: "Points credited",
-      message: `${points} points credited for a verified site visit.`,
-      entity_type: "site_visit",
-      entity_id: visit.site_visit_id,
-    },
-    conn,
-  );
+ await notifyPartner(conn, {
+  partnerId: visit.partner_id,
+  type: NOTIFY.POINT_CREDITED,
+  title: "Points credited",
+  message: `${points} points credited for a verified site visit.`,
+  entityType: "site_visit",
+  entityId: visit.site_visit_id,
+});
 }
 
 export async function verifySiteVisitService(user, idParam, body) {
@@ -411,7 +429,7 @@ export async function verifySiteVisitService(user, idParam, body) {
   }
 
   const id = await withTransaction(async (conn) => {
-    const { visit } = await lockVisit(user, idParam, conn);
+    const { lead,visit } = await lockVisit(user, idParam, conn);
     if (visit.visit_status !== "completed") {
       throw httpError(
         409,
@@ -446,6 +464,17 @@ export async function verifySiteVisitService(user, idParam, body) {
     if (decision === "verified" && visit.partner_id) {
       await creditPoints(visit, points, user.user_id, conn);
     }
+
+    if (decision === "rejected" && visit.partner_id) {
+  await notifyPartner(conn, {
+    partnerId: visit.partner_id,
+    type: NOTIFY.SITE_VISIT_REJECTED,
+    title: "Site visit not verified",
+    message: `The site visit for ${lead.customer_name} could not be verified.`,
+    entityType: "site_visit",
+    entityId: visit.site_visit_id,
+  });
+}
 
     return visit.site_visit_id;
   });

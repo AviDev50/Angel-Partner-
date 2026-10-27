@@ -7,6 +7,7 @@ import * as model from "./bookings.model.js";
 import * as commissionModel from "../commissions/commissions.model.js";
 import * as leadModel from "../leads/leads.model.js";
 import * as referenceModel from "../references/references.model.js";
+import { notifyPartner, NOTIFY } from "../../utils/notify.js";
 
 const BOOKING_STATUSES = ["pending_verification", "booked", "rejected", "cancelled"];
 const SUBMITTABLE_LEAD_STATUSES = ["site_visit_completed", "booking_in_progress"];
