@@ -14,6 +14,7 @@ import notificationsRoutes from "./src/modules/notifications/notifications.route
 import dashboardRoutes from "./src/modules/dashboard/dashboard.routes.js"
 import reportsRoutes from "./src/modules/reports/reports.routes.js"
 import helpRequestRoutes from "./src/modules/help_request/help-requests.routes.js";
+import staticPageRoutes from "./src/modules/static-pages/static-pages.routes.js";
 
 const app = express();
 
@@ -35,6 +36,8 @@ app.use("/api/notifications", notificationsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/help-requests", helpRequestRoutes);
+app.use("/api/help-requests", helpRequestRoutes);
+app.use("/api/pages", staticPageRoutes);
 
 
 // JSON 404
