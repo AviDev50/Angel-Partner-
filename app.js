@@ -12,7 +12,7 @@ import bookingRoutes from "./src/modules/bookings/bookings.routes.js"
 import commissionRoutes from "./src/modules/commissions/commissions.routes.js"
 import notificationsRoutes from "./src/modules/notifications/notifications.routes.js"
 import dashboardRoutes from "./src/modules/dashboard/dashboard.routes.js"
-import reportsRoutes from "./src/modules/dashboard/dashboard.routes.js"
+import reportsRoutes from "./src/modules/reports/reports.routes.js"
 
 const app = express();
 
