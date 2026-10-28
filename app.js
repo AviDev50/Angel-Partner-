@@ -12,6 +12,7 @@ import bookingRoutes from "./src/modules/bookings/bookings.routes.js"
 import commissionRoutes from "./src/modules/commissions/commissions.routes.js"
 import notificationsRoutes from "./src/modules/notifications/notifications.routes.js"
 import dashboardRoutes from "./src/modules/dashboard/dashboard.routes.js"
+import reportsRoutes from "./src/modules/dashboard/dashboard.routes.js"
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/commissions", commissionRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/reports", reportsRoutes);
 
 
 // JSON 404
