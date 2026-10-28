@@ -70,3 +70,42 @@ export async function deleteHelpRequestService(idParam) {
   const affected = await model.deleteHelpRequest(id);
   if (!affected) throw httpError(404, "Help request not found");
 }
+
+// ---------------------------------------------------------------- support number
+const SUPPORT_CHARS = /^[+\d\s\-()]+$/;
+
+// mobile / landline -> 10 digit string, warna null
+function normalizeSupportNumber(value) {
+  const raw = String(value).trim();
+  if (!SUPPORT_CHARS.test(raw)) return null;
+  let digits = raw.replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+  else if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  return /^[1-9]\d{9}$/.test(digits) ? digits : null;
+}
+
+function presentSupport(row) {
+  return { support_number: row?.phone_number ?? null, updated_at: row?.updated_at ?? null };
+}
+
+// partner + admin
+export async function getSupportNumberService() {
+  return presentSupport(await model.getSupportContact());
+}
+
+// admin: set / change; empty value removes the number
+export async function updateSupportNumberService(user, body) {
+  const raw = body.support_number;
+  if (raw === undefined) {
+    throw httpError(400, "support_number is required (send an empty value to remove it)");
+  }
+
+  let phone = null;
+  if (raw !== null && String(raw).trim() !== "") {
+    phone = normalizeSupportNumber(raw);
+    if (!phone) throw httpError(400, "support_number must be a valid mobile or landline number");
+  }
+
+  await model.upsertSupportContact({ phone_number: phone, updated_by: user.user_id });
+  return presentSupport(await model.getSupportContact());
+}

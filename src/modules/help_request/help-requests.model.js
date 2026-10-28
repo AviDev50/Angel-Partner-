@@ -66,3 +66,24 @@ export async function deleteHelpRequest(id, conn = db) {
   const [result] = await conn.query(`DELETE FROM help_requests WHERE help_request_id = ?`, [id]);
   return result.affectedRows;
 }
+
+// ---------------------------------------------------------------- support number (single row, id = 1)
+const SUPPORT_CONTACT_ID = 1;
+
+export async function getSupportContact(conn = db) {
+  const [rows] = await conn.query(
+    `SELECT support_contact_id, phone_number, updated_at
+     FROM support_contacts WHERE support_contact_id = ? LIMIT 1`,
+    [SUPPORT_CONTACT_ID],
+  );
+  return rows[0];
+}
+
+export async function upsertSupportContact(d, conn = db) {
+  await conn.query(
+    `INSERT INTO support_contacts (support_contact_id, phone_number, updated_by)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE phone_number = VALUES(phone_number), updated_by = VALUES(updated_by)`,
+    [SUPPORT_CONTACT_ID, d.phone_number, d.updated_by],
+  );
+}

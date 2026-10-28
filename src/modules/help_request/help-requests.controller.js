@@ -36,3 +36,22 @@ export async function deleteHelpRequest(req, res) {
     sendError(res, error);
   }
 }
+
+export async function getSupportNumber(req, res) {
+  try {
+    const data = await service.getSupportNumberService();
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+export async function updateSupportNumber(req, res) {
+  try {
+    const data = await service.updateSupportNumberService(req.user, req.body);
+    const message = data.support_number ? "Support number updated" : "Support number removed";
+    res.status(200).json({ success: true, message, data });
+  } catch (error) {
+    sendError(res, error);
+  }
+}
