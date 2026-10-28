@@ -13,6 +13,7 @@ import commissionRoutes from "./src/modules/commissions/commissions.routes.js"
 import notificationsRoutes from "./src/modules/notifications/notifications.routes.js"
 import dashboardRoutes from "./src/modules/dashboard/dashboard.routes.js"
 import reportsRoutes from "./src/modules/reports/reports.routes.js"
+import helpRequestRoutes from "./src/modules/help_request/help-requests.routes.js";
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use("/api/commissions", commissionRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/help-requests", helpRequestRoutes);
 
 
 // JSON 404
