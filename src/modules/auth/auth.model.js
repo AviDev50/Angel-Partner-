@@ -16,7 +16,7 @@ export async function getUserByEmail(email) {
 
 export async function getUserById(userId) {
   const [rows] = await db.query(
-    `SELECT u.user_id, u.full_name, u.email, u.mobile, u.status, r.role_name
+    `SELECT u.user_id, u.full_name, u.email, u.mobile, u.status, r.role_name, u.date_of_birth
      FROM users u
      JOIN roles r ON r.role_id = u.role_id AND r.deleted_at IS NULL
      WHERE u.user_id = ? AND u.deleted_at IS NULL
@@ -95,4 +95,50 @@ export async function updateLastLogin(userId) {
     `UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE user_id = ?`,
     [userId],
   );
+}
+
+export async function saveRefreshToken(conn, { userId, tokenHash, expiresAt }) {
+  await (conn || db).query(
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)`,
+    [userId, tokenHash, expiresAt],
+  );
+}
+
+export async function findRefreshToken(conn, tokenHash) {
+  const [rows] = await (conn || db).query(
+    `SELECT refresh_token_id, user_id, expires_at, revoked_at
+     FROM refresh_tokens
+     WHERE token_hash = ? AND deleted_at IS NULL
+     LIMIT 1 ${conn ? "FOR UPDATE" : ""}`,
+    [tokenHash],
+  );
+  return rows[0];
+}
+
+export async function revokeRefreshToken(conn, refreshTokenId) {
+  const [r] = await (conn || db).query(
+    `UPDATE refresh_tokens SET revoked_at = UTC_TIMESTAMP()
+     WHERE refresh_token_id = ? AND revoked_at IS NULL`,
+    [refreshTokenId],
+  );
+  return r.affectedRows;
+}
+
+export async function revokeAllUserRefreshTokens(userId) {
+  await db.query(
+    `UPDATE refresh_tokens SET revoked_at = UTC_TIMESTAMP()
+     WHERE user_id = ? AND revoked_at IS NULL`,
+    [userId],
+  );
+}
+
+export async function getUserWithRoleById(userId) {
+  const [rows] = await db.query(
+    `SELECT u.user_id, u.full_name, u.email, u.mobile, u.status, r.role_name
+     FROM users u
+     JOIN roles r ON r.role_id = u.role_id AND r.deleted_at IS NULL
+     WHERE u.user_id = ? AND u.deleted_at IS NULL LIMIT 1`,
+    [userId],
+  );
+  return rows[0];
 }
