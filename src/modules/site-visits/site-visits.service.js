@@ -6,7 +6,7 @@ import { parseFutureDateTime } from "../../utils/dates.js";
 import * as model from "./site-visits.model.js";
 import * as leadModel from "../leads/leads.model.js";
 import * as referenceModel from "../references/references.model.js";
-import { notifyPartner, NOTIFY } from "../../utils/notify.js";
+import { notifyPartner, NOTIFY,formatIST } from "../../utils/notify.js";
 
 const VISIT_STATUSES = [
   "scheduled",
