@@ -120,7 +120,7 @@ export async function getMeService(userId) {
   if (!user || user.status !== "active") {
     throw httpError(401, "Unauthorized");
   }
-  return sanitizeUser(user);
+   return { ...sanitizeUser(user), date_of_birth: user.date_of_birth };
 }
 
 export async function refreshService(refreshToken) {

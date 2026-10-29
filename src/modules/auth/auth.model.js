@@ -16,7 +16,7 @@ export async function getUserByEmail(email) {
 
 export async function getUserById(userId) {
   const [rows] = await db.query(
-    `SELECT u.user_id, u.full_name, u.email, u.mobile, u.status, r.role_name, u.date_of_birth
+    `SELECT u.user_id, u.full_name, u.email, u.mobile, u.status, r.role_name, DATE_FORMAT(u.date_of_birth, '%Y-%m-%d') AS date_of_birth
      FROM users u
      JOIN roles r ON r.role_id = u.role_id AND r.deleted_at IS NULL
      WHERE u.user_id = ? AND u.deleted_at IS NULL
