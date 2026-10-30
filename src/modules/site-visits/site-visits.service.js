@@ -429,7 +429,7 @@ export async function verifySiteVisitService(user, idParam, body) {
   }
 
   const id = await withTransaction(async (conn) => {
-    const { lead,visit } = await lockVisit(user, idParam, conn);
+    const { lead, visit } = await lockVisit(user, idParam, conn);
     if (visit.visit_status !== "completed") {
       throw httpError(
         409,
@@ -437,7 +437,6 @@ export async function verifySiteVisitService(user, idParam, body) {
       );
     }
 
-    // partner wali visit verify karte time points dena zaroori hai
     if (decision === "verified" && visit.partner_id && !points) {
       throw httpError(
         400,
@@ -465,16 +464,43 @@ export async function verifySiteVisitService(user, idParam, body) {
       await creditPoints(visit, points, user.user_id, conn);
     }
 
-    if (decision === "rejected" && visit.partner_id) {
-  await notifyPartner(conn, {
-    partnerId: visit.partner_id,
-    type: NOTIFY.SITE_VISIT_REJECTED,
-    title: "Site visit not verified",
-    message: `The site visit for ${lead.customer_name} could not be verified.`,
-    entityType: "site_visit",
-    entityId: visit.site_visit_id,
-  });
-}
+    if (decision === "rejected") {
+      // lead aage nikal chuki ho to peeche mat le jao
+      if (lead.status === "site_visit_completed") {
+        await setLeadStatus(
+          lead,
+          "site_visit_rejected",
+          user.user_id,
+          `Site visit #${visit.site_visit_id} rejected`,
+          conn,
+        );
+      }
+
+      const ref = await referenceModel.getReferenceForUpdate(
+        lead.customer_reference_id,
+        conn,
+      );
+      if (ref && ref.status === "site_visit_completed") {
+        await setReferenceStatus(
+          ref,
+          "site_visit_rejected",
+          user.user_id,
+          `Site visit #${visit.site_visit_id} rejected`,
+          conn,
+        );
+      }
+
+      if (visit.partner_id) {
+        await notifyPartner(conn, {
+          partnerId: visit.partner_id,
+          type: NOTIFY.SITE_VISIT_REJECTED,
+          title: "Site visit not verified",
+          message: `The site visit for ${lead.customer_name} could not be verified.`,
+          entityType: "site_visit",
+          entityId: visit.site_visit_id,
+        });
+      }
+    }
 
     return visit.site_visit_id;
   });

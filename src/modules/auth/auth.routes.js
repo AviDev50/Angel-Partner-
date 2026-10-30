@@ -6,8 +6,8 @@ const router = express.Router();
 
 router.post("/register", register);
 router.post("/login", login);
-router.post("/refresh", refresh);              // public: refresh token body mein
-router.post("/logout", logout);                // public: expired access token pe bhi logout chalna chahiye
+router.post("/refresh", refresh);              // public: refresh token inside the body 
+router.post("/logout", logout);                // public: logout also work in expired access token 
 router.post("/logout-all", authenticate, logoutAll);
 router.get("/me", authenticate, me);
 

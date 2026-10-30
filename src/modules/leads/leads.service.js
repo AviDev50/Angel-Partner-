@@ -12,6 +12,7 @@ const LEAD_STATUSES = [
   "follow_up_required",
   "site_visit_scheduled",
   "site_visit_completed",
+  "site_visit_rejected",
   "booking_in_progress",
   "converted",
   "lost",
@@ -30,6 +31,17 @@ const MANUAL_STATUSES = [
 // Terminal: inke baad na status badlega na reassign hoga
 const LOCKED_STATUSES = ["converted", "lost", "closed"];
 
+// Manual update mein sirf aage ki taraf jaa sakte hain (rollback nahi)
+const ALLOWED_TRANSITIONS = {
+  new: ["contacted", "follow_up_required", "booking_in_progress", "lost", "closed"],
+  contacted: ["follow_up_required", "booking_in_progress", "lost", "closed"],
+  follow_up_required: ["booking_in_progress", "lost", "closed"],
+  site_visit_scheduled: ["lost", "closed"],
+  site_visit_completed: ["booking_in_progress", "lost", "closed"],
+  site_visit_rejected: ["booking_in_progress", "lost", "closed"],
+  booking_in_progress: ["lost", "closed"],
+};
+
 // lead status -> partner ko dikhne wala reference status
 const REFERENCE_SYNC = {
   contacted: "in_progress",
@@ -44,11 +56,11 @@ function nextReferenceStatus(refStatus, leadStatus) {
   if (!target || refStatus === target) return null;
   if (["converted", "closed"].includes(refStatus)) return null;
   // reference aage badh chuka ho (site visit etc.) to peeche mat le jao
-  if (
-    target === "in_progress" &&
-    !["accepted", "assigned_to_sales_team"].includes(refStatus)
-  )
-    return null;
+if (
+  target === "in_progress" &&
+  !["accepted", "assigned_to_sales_team", "site_visit_rejected"].includes(refStatus)
+)
+  return null;
   return target;
 }
 
@@ -161,6 +173,23 @@ export async function updateLeadStatusService(user, idParam, body) {
     }
     if (lead.status === status)
       throw httpError(409, `Lead is already '${status}'`);
+
+if (["lost", "closed", "booking_in_progress"].includes(status)) {
+  const openVisit = await siteVisitModel.findOpenVisit(leadId, conn);
+  if (openVisit) {
+    throw httpError(
+      409,
+      "Lead has an open site visit. Cancel it or wait for verification first",
+    );
+  }
+}
+     const allowed = ALLOWED_TRANSITIONS[lead.status] || [];
+    if (!allowed.includes(status)) {
+      throw httpError(
+        409,
+        `Cannot change status from '${lead.status}' to '${status}'`,
+      );
+    }
 
     await leadModel.updateLeadStatus(leadId, status, conn);
     await referenceModel.addStatusHistory(
