@@ -5,6 +5,7 @@ import { optionalString } from "../../utils/customerFields.js";
 import * as leadModel from "./leads.model.js";
 import * as referenceModel from "../references/references.model.js";
 import { notifyPartner, NOTIFY } from "../../utils/notify.js";
+import * as siteVisitModel from "../site-visits/site-visits.model.js";
 
 const LEAD_STATUSES = [
   "new",
