@@ -85,19 +85,19 @@ export async function getReferenceForUpdate(id, conn) {
 
 export async function extendExpiry(id, days, conn = db) {
   await conn.query(
-`UPDATE customer_references
- SET expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY)
- WHERE customer_reference_id = ? AND expired_at IS NULL
-   AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())`
+    `UPDATE customer_references
+     SET expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY)
+     WHERE customer_reference_id = ? AND expired_at IS NULL
+       AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())`,
     [days, id],
   );
 }
 
 export async function clearExpiry(id, conn = db) {
   await conn.query(
- `UPDATE customer_references SET expires_at = NULL
- WHERE customer_reference_id = ? AND expired_at IS NULL
-   AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())`
+    `UPDATE customer_references SET expires_at = NULL
+     WHERE customer_reference_id = ? AND expired_at IS NULL
+       AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())`,
     [id],
   );
 }

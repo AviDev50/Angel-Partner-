@@ -18,6 +18,7 @@ const STATUSES = [
   "in_progress",
   "site_visit_scheduled",
   "site_visit_completed",
+  "site_visit_rejected",
   "converted",
   "closed",
 ];
@@ -209,19 +210,15 @@ export async function listReferencesService(user, query) {
 
   const filters = { page, limit };
 
-//   if (query.status) {
-//   const expiredFilter = user.role === "partner" && query.status === "expired";
-//   if (!expiredFilter && !STATUSES.includes(query.status))
-//     throw httpError(400, "Invalid status filter");
-//   filters.status = query.status;
-// }
-// filters.partnerView = user.role === "partner";
-
   if (query.status) {
-    if (!STATUSES.includes(query.status))
+    // "expired" sirf partner ke liye valid hai (admin/sales ko real status dikhta hai)
+    const expiredFilter = user.role === "partner" && query.status === "expired";
+    if (!expiredFilter && !STATUSES.includes(query.status))
       throw httpError(400, "Invalid status filter");
     filters.status = query.status;
   }
+  filters.partnerView = user.role === "partner";
+
   if (query.q && String(query.q).trim()) filters.q = String(query.q).trim();
 
   if (user.role === "partner") {
@@ -266,24 +263,21 @@ export async function getReferenceService(user, idParam) {
     return { ...ref, status_history: history };
   }
 
-  
-// // getReferenceService mein partner branch:
-// const visible = ref.expired_at
-//   ? history.filter((h) => new Date(h.created_at) < new Date(ref.expired_at))
-//   : history;
-// const items = visible.map((h) => ({ to_status: h.to_status, created_at: h.created_at }));
-// if (ref.expired_at) items.push({ to_status: "expired", created_at: ref.expired_at });
-// return { ...toPartnerView(ref), status_history: items };
+  // partner: expiry ke baad ki real history chhupao, last mein "expired" dikhao
+  const visible = ref.expired_at
+    ? history.filter((h) => new Date(h.created_at) < new Date(ref.expired_at))
+    : history;
 
-  return {
-    ...toPartnerView(ref),
-    status_history: history.map((h) => ({
-      to_status: h.to_status,
-      created_at: h.created_at,
-    })),
-  };
+  const items = visible.map((h) => ({
+    to_status: h.to_status,
+    created_at: h.created_at,
+  }));
+  if (ref.expired_at) {
+    items.push({ to_status: "expired", created_at: ref.expired_at });
+  }
+
+  return { ...toPartnerView(ref), status_history: items };
 }
-
 
 // cron ke liye naya function (notifyPartner, NOTIFY already imported hain)
 export async function expireDueReferencesService(batch = 200) {
