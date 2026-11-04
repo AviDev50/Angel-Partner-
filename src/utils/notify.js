@@ -19,6 +19,7 @@ export const NOTIFY = {
   COMMISSION_PAID: "commission_paid",
   ANNOUNCEMENT: "announcement",
   ADMIN_MESSAGE: "admin_message",
+  REFERENCE_EXPIRED: "reference_expired",
 };
 
 // partner ko dikhane ke liye IST format
@@ -50,15 +51,22 @@ function values(n) {
   ];
 }
 
-// Ek partner ko. INSERT...SELECT me role check hai => sales/admin ko kabhi notification nahi jayegi.
-// Business transaction ke andar call karo (conn pass karo) taaki action fail ho to notification bhi na bane.
-export async function notifyPartner(conn, { partnerId, ...n }) {
+// customerReferenceId do => wo reference expired ho to notification skip
+export async function notifyPartner(conn, { partnerId, customerReferenceId, ...n }) {
+  const params = [...values(n), partnerId];
+  let skipExpired = "";
+  if (customerReferenceId) {
+    skipExpired = `AND NOT EXISTS (SELECT 1 FROM customer_references cr
+                    WHERE cr.customer_reference_id = ? AND cr.expired_at IS NOT NULL)`;
+    params.push(customerReferenceId);
+  }
   const [res] = await (conn || db).query(
     `${INSERT_HEAD}
      SELECT u.user_id, ?, ?, ?, ?, ?, ?
      ${PARTNER_FROM}
-     WHERE u.user_id = ? AND r.role_name = 'partner' AND u.deleted_at IS NULL`,
-    [...values(n), partnerId],
+     WHERE u.user_id = ? AND r.role_name = 'partner' AND u.deleted_at IS NULL
+     ${skipExpired}`,
+    params,
   );
   return res.affectedRows;
 }

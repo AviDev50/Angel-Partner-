@@ -7,6 +7,7 @@ import {
 } from "../../utils/validators.js";
 import * as referenceModel from "./references.model.js";
 import { notifyPartner, NOTIFY } from "../../utils/notify.js";
+import { autoAssignLead } from "../leads/leads.service.js";
 
 const STATUSES = [
   "submitted",
@@ -20,12 +21,6 @@ const STATUSES = [
   "converted",
   "closed",
 ];
-
-// admin review ke allowed transitions (aage ke statuses leads module handle karega)
-const REVIEW_TRANSITIONS = {
-  submitted: ["under_review", "accepted", "rejected"],
-  under_review: ["accepted", "rejected"],
-};
 
 function optionalString(value, max, field) {
   if (value === undefined || value === null) return null;
@@ -48,10 +43,11 @@ function toPartnerView(ref) {
     customer_budget: ref.customer_budget,
     preferred_project_location: ref.preferred_project_location,
     remarks: ref.remarks,
-    status: ref.status,
     review_remarks: ref.review_remarks,
     created_at: ref.created_at,
     updated_at: ref.updated_at,
+    status: ref.expired_at ? "expired" : ref.status,
+expires_at: ref.expires_at,   // Flutter "X days left" dikha sake
   };
 }
 
@@ -107,7 +103,10 @@ export async function createReferenceService(user, body) {
   const referenceId = await withTransaction(async (conn) => {
     // duplicate => sirf flag, kabhi reject/merge nahi
     const original = await referenceModel.findEarliestByMobile(mobile, conn);
-
+    
+// create ke transaction mein, insertReference se pehle:
+const expiryDays = await referenceModel.getExpiryDays(conn);
+// insertReference ke data mein: expiry_days: expiryDays
     const id = await referenceModel.insertReference(
       {
         ...data,
@@ -115,6 +114,7 @@ export async function createReferenceService(user, body) {
         duplicate_of_reference_id: original
           ? original.customer_reference_id
           : null,
+           expiry_days: expiryDays,
       },
       conn,
     );
@@ -135,17 +135,69 @@ export async function createReferenceService(user, body) {
     );
 
     await notifyPartner(conn, {
-  partnerId: user.user_id,
-  type: NOTIFY.REFERENCE_SUBMITTED,
-  title: "Reference submitted",
-  message: `Your reference ${code} for ${customerName} has been submitted.`,
-  entityType: "customer_reference",
-  entityId: id,
-});
+      partnerId: user.user_id,
+      type: NOTIFY.REFERENCE_SUBMITTED,
+      title: "Reference submitted",
+      message: `Your reference ${code} for ${customerName} has been submitted.`,
+      entityType: "customer_reference",
+      entityId: id,
+    });
+
+    // ---- admin review ki jagah: lead auto-create + auto-assign
+    const leadId = await referenceModel.createLeadFromReference(
+      { customer_reference_id: id, ...data },
+      user.user_id, // created_by = submit karne wala partner
+      conn,
+    );
+    await referenceModel.addStatusHistory(
+      {
+        entity_type: "lead",
+        entity_id: leadId,
+        from_status: null,
+        to_status: "new",
+        changed_by: user.user_id,
+        remarks: `Created from ${code}`,
+      },
+      conn,
+    );
+
+    const salesUserId = await autoAssignLead(conn, {
+      leadId,
+      mobile,
+      assignedBy: user.user_id,
+    });
+
+    // koi active sales member nahi => 'accepted', admin manually assign karega
+    const nextStatus = salesUserId ? "assigned_to_sales_team" : "accepted";
+    await referenceModel.updateStatus(id, nextStatus, conn);
+    await referenceModel.addStatusHistory(
+      {
+        entity_type: "customer_reference",
+        entity_id: id,
+        from_status: "submitted",
+        to_status: nextStatus,
+        changed_by: user.user_id,
+        remarks: salesUserId
+          ? "Auto-assigned to sales team"
+          : "Lead created, waiting for manual assignment",
+      },
+      conn,
+    );
+
+    if (salesUserId) {
+      await notifyPartner(conn, {
+        partnerId: user.user_id,
+        type: NOTIFY.LEAD_ASSIGNED,
+        title: "Lead assigned",
+        message: `Your reference ${code} has been assigned to our sales team.`,
+        entityType: "customer_reference",
+        entityId: id,
+      });
+    }
 
     return id;
   });
-
+  
   const ref = await referenceModel.getReferenceById(referenceId);
   return toPartnerView(ref);
 }
@@ -156,6 +208,14 @@ export async function listReferencesService(user, query) {
   const limit = Math.min(Math.max(parseInt(query.limit, 10) || 10, 1), 100);
 
   const filters = { page, limit };
+
+//   if (query.status) {
+//   const expiredFilter = user.role === "partner" && query.status === "expired";
+//   if (!expiredFilter && !STATUSES.includes(query.status))
+//     throw httpError(400, "Invalid status filter");
+//   filters.status = query.status;
+// }
+// filters.partnerView = user.role === "partner";
 
   if (query.status) {
     if (!STATUSES.includes(query.status))
@@ -205,6 +265,16 @@ export async function getReferenceService(user, idParam) {
   if (user.role === "admin") {
     return { ...ref, status_history: history };
   }
+
+  
+// // getReferenceService mein partner branch:
+// const visible = ref.expired_at
+//   ? history.filter((h) => new Date(h.created_at) < new Date(ref.expired_at))
+//   : history;
+// const items = visible.map((h) => ({ to_status: h.to_status, created_at: h.created_at }));
+// if (ref.expired_at) items.push({ to_status: "expired", created_at: ref.expired_at });
+// return { ...toPartnerView(ref), status_history: items };
+
   return {
     ...toPartnerView(ref),
     status_history: history.map((h) => ({
@@ -214,105 +284,29 @@ export async function getReferenceService(user, idParam) {
   };
 }
 
-// ---------------------------------------------------------------- review (admin)
-export async function reviewReferenceService(user, idParam, body) {
-  const id = parsePositiveInt(idParam);
-  if (!id) throw httpError(400, "Invalid reference id");
 
-  const decision = String(body.decision || "").trim();
-  if (!["under_review", "accepted", "rejected"].includes(decision)) {
-    throw httpError(
-      400,
-      "decision must be one of: under_review, accepted, rejected",
-    );
-  }
-
-  const remarks = optionalString(body.remarks, 500, "remarks");
-  if (decision === "rejected" && !remarks) {
-    throw httpError(400, "remarks are required when rejecting a reference");
-  }
-
-  await withTransaction(async (conn) => {
-    // row lock: do admin ek saath review karein to race na ho
-    const ref = await referenceModel.getReferenceForUpdate(id, conn);
-    if (!ref) throw httpError(404, "Reference not found");
-
-    const allowed = REVIEW_TRANSITIONS[ref.status] || [];
-    if (!allowed.includes(decision)) {
-      throw httpError(
-        409,
-        `Cannot move reference from '${ref.status}' to '${decision}'`,
-      );
+// cron ke liye naya function (notifyPartner, NOTIFY already imported hain)
+export async function expireDueReferencesService(batch = 200) {
+  const ids = await referenceModel.findExpiryDue(batch);
+  let count = 0;
+  for (const id of ids) {
+    try {
+      await withTransaction(async (conn) => {
+        const ref = await referenceModel.getReferenceForUpdate(id, conn); // row lock
+        if (!ref || !(await referenceModel.stampExpired(id, conn))) return;
+        await notifyPartner(conn, {
+          partnerId: ref.partner_id,
+          type: NOTIFY.REFERENCE_EXPIRED,
+          title: "Reference expired",
+          message: `Your reference ${ref.reference_code} for ${ref.customer_name} has expired.`,
+          entityType: "customer_reference",
+          entityId: id,
+        });
+        count++;
+      });
+    } catch (err) {
+      console.error(`[expiry] reference ${id} failed`, err);
     }
-
-    await referenceModel.updateReview(
-      id,
-      decision,
-      user.user_id,
-      remarks,
-      conn,
-    );
-
-    await referenceModel.addStatusHistory(
-      {
-        entity_type: "customer_reference",
-        entity_id: id,
-        from_status: ref.status,
-        to_status: decision,
-        changed_by: user.user_id,
-        remarks,
-      },
-      conn,
-    );
-
-    if (decision === "accepted") {
-      const leadId = await referenceModel.createLeadFromReference(
-        ref,
-        user.user_id,
-        conn,
-      );
-      await referenceModel.addStatusHistory(
-        {
-          entity_type: "lead",
-          entity_id: leadId,
-          from_status: null,
-          to_status: "new",
-          changed_by: user.user_id,
-          remarks: `Created from ${ref.reference_code}`,
-        },
-        conn,
-      );
-    }
-
-    const copy = {
-      under_review: [
-        "reference_under_review",
-        "Reference under review",
-        `Your reference ${ref.reference_code} for ${ref.customer_name} is now under review.`,
-      ],
-      accepted: [
-        "reference_accepted",
-        "Reference accepted",
-        `Your reference ${ref.reference_code} for ${ref.customer_name} has been accepted.`,
-      ],
-      rejected: [
-        "reference_rejected",
-        "Reference rejected",
-        `Your reference ${ref.reference_code} for ${ref.customer_name} was rejected. Reason: ${remarks}`,
-      ],
-    }[decision];
-
-   await notifyPartner(conn, {
-  partnerId: ref.partner_id,
-  type: copy[0],
-  title: copy[1],
-  message: copy[2],
-  entityType: "customer_reference",
-  entityId: id,
-});
-  });
-
-  const ref = await referenceModel.getReferenceById(id);
-  const history = await referenceModel.getStatusHistory(id);
-  return { ...ref, status_history: history };
+  }
+  return count;
 }

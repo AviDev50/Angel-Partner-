@@ -7,7 +7,7 @@ const COLUMNS = `
   rb.full_name AS recorded_by_name,
   vb.full_name AS verified_by_name,
   la.assigned_user_id AS sales_user_id,
-  c.commission_id, c.commission_amount, c.commission_status
+  c.commission_id, c.commission_amount, c.commission_status, c.commission_photo
 `;
 
 const FROM = `
@@ -51,9 +51,9 @@ export async function findOpenBooking(leadId, conn = db) {
 export async function insertBooking(d, conn = db) {
   const [result] = await conn.query(
     `INSERT INTO bookings
-       (lead_id, partner_id, project_name, booking_date, booking_status, remarks, recorded_by)
-     VALUES (?, ?, ?, ?, 'pending_verification', ?, ?)`,
-    [d.lead_id, d.partner_id, d.project_name, d.booking_date, d.remarks, d.recorded_by],
+       (lead_id, partner_id, project_name, booking_date, booking_status, remarks, recorded_by, commission_eligible)
+     VALUES (?, ?, ?, ?, 'pending_verification', ?, ?, ?)`,
+    [d.lead_id, d.partner_id, d.project_name, d.booking_date, d.remarks, d.recorded_by, d.commission_eligible],
   );
   return result.insertId;
 }
@@ -117,3 +117,4 @@ export async function createNotification(n, conn = db) {
     [n.user_id, n.type, n.title, n.message, n.entity_type, n.entity_id],
   );
 }
+

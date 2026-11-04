@@ -100,6 +100,7 @@ export async function listLeadsService(user, query) {
     filters.status = query.status;
   }
   if (query.q && String(query.q).trim()) filters.q = String(query.q).trim();
+  if (query.expired === "true") filters.expired = true;
 
   if (user.role === "sales_team") {
     filters.assignedUserId = user.user_id; // hamesha sirf apni
@@ -225,6 +226,7 @@ if (["lost", "closed", "booking_in_progress"].includes(status)) {
         conn,
       );
       await notifyPartner(conn, {
+        customerReferenceId: ref.customer_reference_id,
   partnerId: ref.partner_id,
   type: NOTIFY.REFERENCE_STATUS_UPDATED,
   title: "Reference status updated",
@@ -236,6 +238,9 @@ if (["lost", "closed", "booking_in_progress"].includes(status)) {
   entityId: ref.customer_reference_id,
 });
     }
+    if (ref && ["lost", "closed"].includes(status)) {
+  await referenceModel.clearExpiry(ref.customer_reference_id, conn);
+}
   });
 
   return getLeadService(user, leadId);
@@ -309,6 +314,7 @@ export async function assignLeadService(user, idParam, body) {
         conn,
       );
       await notifyPartner(conn, {
+        customerReferenceId: ref.customer_reference_id,
   partnerId: ref.partner_id,
   type: NOTIFY.LEAD_ASSIGNED,
   title: "Lead assigned",
@@ -321,6 +327,34 @@ export async function assignLeadService(user, idParam, body) {
   });
 
   return getLeadService(user, leadId);
+}
+
+// ---------------------------------------------------------------- auto assign
+// Caller ki transaction (conn) ke andar chalta hai. Assign hua to sales user_id, warna null.
+export async function autoAssignLead(conn, { leadId, mobile, assignedBy }) {
+  let userId = await leadModel.findStickyAssignee(mobile, conn);
+  let mode = "duplicate customer, same sales member";
+
+  if (!userId) {
+    mode = "round robin";
+    const last = await leadModel.lockRoundRobinCursor(conn);
+    const ids = await leadModel.getActiveSalesUserIds(conn);
+    if (!ids.length) return null;
+    userId = ids.find((id) => id > last) ?? ids[0];
+    await leadModel.saveRoundRobinCursor(userId, conn);
+  }
+
+  await leadModel.insertAssignment(
+    {
+      lead_id: leadId,
+      assignment_type: "sales_team",
+      assigned_user_id: userId,
+      assigned_by: assignedBy,
+      remarks: `Auto-assigned (${mode})`,
+    },
+    conn,
+  );
+  return userId;
 }
 
 // ---------------------------------------------------------------- follow-ups

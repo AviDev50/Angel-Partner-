@@ -7,13 +7,24 @@ const VISIT_COLUMNS = `
   sb.full_name AS scheduled_by_name,
   vb.full_name AS verified_by_name,
   la.assigned_user_id AS sales_user_id,
-  pt.points AS points_credited
+  pt.points AS points_credited,
+  cr.reference_code,
+  cr.is_potential_duplicate,
+  cr.duplicate_of_reference_id,
+  dcr.reference_code AS duplicate_of_reference_code,
+  (SELECT COUNT(*) FROM customer_references x
+    WHERE x.duplicate_of_reference_id = cr.customer_reference_id
+      AND x.deleted_at IS NULL) AS duplicate_count
 `;
 
 const VISIT_FROM = `
   FROM site_visits sv
   JOIN leads l ON l.lead_id = sv.lead_id
   JOIN users sb ON sb.user_id = sv.scheduled_by
+  LEFT JOIN customer_references cr
+         ON cr.customer_reference_id = l.customer_reference_id
+  LEFT JOIN customer_references dcr
+         ON dcr.customer_reference_id = cr.duplicate_of_reference_id
   LEFT JOIN users p  ON p.user_id  = sv.partner_id
   LEFT JOIN users vb ON vb.user_id = sv.verified_by
   LEFT JOIN lead_assignments la
@@ -67,12 +78,13 @@ export async function insertVisit(data, conn = db) {
   return result.insertId;
 }
 
-export async function markCompleted(id, remarks, conn = db) {
+export async function markCompleted(id, remarks, photo, pointsEligible, conn = db) {
   await conn.query(
     `UPDATE site_visits
-     SET visit_status = 'completed', visit_remarks = ?, completed_at = UTC_TIMESTAMP()
+     SET visit_status = 'completed', visit_remarks = ?, completion_photo = ?,
+         points_eligible = ?, completed_at = UTC_TIMESTAMP()
      WHERE site_visit_id = ?`,
-    [remarks, id],
+    [remarks, photo, pointsEligible ? 1 : 0, id],
   );
 }
 

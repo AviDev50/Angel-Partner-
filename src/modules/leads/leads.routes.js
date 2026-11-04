@@ -21,3 +21,5 @@ router.get("/:id/follow-ups", authorize("admin", "sales_team"), listFollowUps);
 router.post("/:id/follow-ups", authorize("admin", "sales_team"), addFollowUp);
 
 export default router;
+
+

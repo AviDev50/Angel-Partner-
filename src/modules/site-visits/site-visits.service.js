@@ -22,7 +22,16 @@ const MAX_POINTS = 1000000;
 // sales ko partner info / points nahi dikhane
 function viewFor(user, visit) {
   if (user.role === "admin") return visit;
-  const { partner_id, partner_name, points_credited, ...rest } = visit;
+  const {
+    partner_id,
+    partner_name,
+    points_credited,
+    is_potential_duplicate,
+    duplicate_of_reference_id,
+    duplicate_of_reference_code,
+    duplicate_count,
+    ...rest
+  } = visit;
   return rest;
 }
 
@@ -173,6 +182,7 @@ export async function scheduleSiteVisitService(user, body) {
     }
     if (lead.source_partner_id) {
   await notifyPartner(conn, {
+    customerReferenceId: lead.customer_reference_id,
     partnerId: lead.source_partner_id,
     type: NOTIFY.SITE_VISIT_SCHEDULED,
     title: "Site visit scheduled",
@@ -238,7 +248,8 @@ export async function getSiteVisitService(user, idParam) {
 }
 
 // ---------------------------------------------------------------- complete
-export async function completeSiteVisitService(user, idParam, body) {
+export async function completeSiteVisitService(user, idParam, body, file) {
+  if (!file) throw httpError(400, "photo is required (exactly 1 image)");
   const remarks = optionalString(body.visit_remarks, 5000, "visit_remarks");
   if (!remarks)
     throw httpError(400, "visit_remarks (completion details) are required");
@@ -246,46 +257,35 @@ export async function completeSiteVisitService(user, idParam, body) {
   const id = await withTransaction(async (conn) => {
     const { lead, visit } = await lockVisit(user, idParam, conn);
     if (visit.visit_status !== "scheduled") {
-      throw httpError(
-        409,
-        `Site visit is '${visit.visit_status}' and cannot be completed`,
-      );
+      throw httpError(409, `Site visit is '${visit.visit_status}' and cannot be completed`);
     }
 
-    await model.markCompleted(visit.site_visit_id, remarks, conn);
-    await visitHistory(
-      visit,
-      "scheduled",
-      "completed",
-      user.user_id,
-      remarks,
-      conn,
-    );
+    // reference pehle se expired hai to is visit pe points nahi milenge
+    const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
+    const pointsEligible = !(ref && ref.is_expired);
+
+    await model.markCompleted(visit.site_visit_id, remarks, file.filename, pointsEligible, conn);
+    await visitHistory(visit, "scheduled", "completed", user.user_id, remarks, conn);
     await setLeadStatus(
-      lead,
-      "site_visit_completed",
-      user.user_id,
-      `Site visit #${visit.site_visit_id} submitted for verification`,
-      conn,
+      lead, "site_visit_completed", user.user_id,
+      `Site visit #${visit.site_visit_id} submitted for verification`, conn,
     );
 
-    const ref = await referenceModel.getReferenceForUpdate(
-      lead.customer_reference_id,
-      conn,
-    );
-    if (
-      ref &&
-      !["converted", "closed", "site_visit_completed"].includes(ref.status)
-    ) {
-      await setReferenceStatus(
-        ref,
-        "site_visit_completed",
-        user.user_id,
-        `Site visit #${visit.site_visit_id} submitted for verification`,
+    // Stage 1 khatam => Stage 2 (booking) ke liye naye din
+    if (ref && pointsEligible) {
+      await referenceModel.extendExpiry(
+        ref.customer_reference_id,
+        await referenceModel.getExpiryDays(conn),
         conn,
       );
     }
 
+    if (ref && !["converted", "closed", "site_visit_completed"].includes(ref.status)) {
+      await setReferenceStatus(
+        ref, "site_visit_completed", user.user_id,
+        `Site visit #${visit.site_visit_id} submitted for verification`, conn,
+      );
+    }
     return visit.site_visit_id;
   });
 
@@ -336,6 +336,7 @@ export async function cancelSiteVisitService(user, idParam, body) {
       lead.customer_reference_id,
       conn,
     );
+    if (ref) await referenceModel.clearExpiry(ref.customer_reference_id, conn); 
     if (ref && ref.status === "site_visit_scheduled") {
       const prev = await model.getPreviousStatus(
         "customer_reference",
@@ -354,6 +355,7 @@ export async function cancelSiteVisitService(user, idParam, body) {
     }
     if (visit.partner_id) {
   await notifyPartner(conn, {
+    customerReferenceId: lead.customer_reference_id,
     partnerId: visit.partner_id,
     type: NOTIFY.SITE_VISIT_CANCELLED,
     title: "Site visit cancelled",
@@ -371,7 +373,7 @@ export async function cancelSiteVisitService(user, idParam, body) {
 
 // ---------------------------------------------------------------- verify (admin) + points credit
 // ---------------------------------------------------------------- verify (admin) + custom points credit
-async function creditPoints(visit, points, adminId, conn) {
+async function creditPoints(visit, points, adminId, customerReferenceId, conn) {
   await model.ensureWallet(visit.partner_id, conn);
   const wallet = await model.getWalletForUpdate(visit.partner_id, conn);
   const newBalance = wallet.points_balance + points;
@@ -390,6 +392,7 @@ async function creditPoints(visit, points, adminId, conn) {
   await model.setWalletBalance(wallet.partner_wallet_id, newBalance, conn);
 
  await notifyPartner(conn, {
+  customerReferenceId,
   partnerId: visit.partner_id,
   type: NOTIFY.POINT_CREDITED,
   title: "Points credited",
@@ -438,12 +441,17 @@ export async function verifySiteVisitService(user, idParam, body) {
       );
     }
 
-    if (decision === "verified" && visit.partner_id && !points) {
-      throw httpError(
-        400,
-        "points are required when verifying this site visit",
-      );
-    }
+// verify: parse hone ke baad, transaction ke andar, visit_status check ke turant baad
+// (purana "if (decision === 'verified' && visit.partner_id && !points)" wala block hata do)
+if (decision === "verified" && visit.partner_id) {
+  if (visit.points_eligible && !points) {
+    throw httpError(400, "points are required when verifying this site visit");
+  }
+  if (!visit.points_eligible && points) {
+    throw httpError(400, "points are not allowed: the reference had expired before this visit was completed");
+  }
+}
+
 
     await model.markVerification(
       visit.site_visit_id,
@@ -461,9 +469,12 @@ export async function verifySiteVisitService(user, idParam, body) {
       conn,
     );
 
-    if (decision === "verified" && visit.partner_id) {
-      await creditPoints(visit, points, user.user_id, conn);
-    }
+   
+// credit wala block:
+if (decision === "verified" && visit.partner_id && visit.points_eligible) {
+  await creditPoints(visit, points, user.user_id, lead.customer_reference_id, conn);
+}
+
 
     if (decision === "rejected") {
       // lead aage nikal chuki ho to peeche mat le jao
@@ -482,6 +493,8 @@ export async function verifySiteVisitService(user, idParam, body) {
         conn,
       );
       if (ref && ref.status === "site_visit_completed") {
+        // rejected branch mein, ref fetch hone ke baad:
+if (ref) await referenceModel.clearExpiry(ref.customer_reference_id, conn); // reject => kabhi expire nahi
         await setReferenceStatus(
           ref,
           "site_visit_rejected",

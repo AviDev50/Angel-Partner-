@@ -28,28 +28,6 @@ export async function getCommissionForUpdate(id, conn) {
   return rows[0];
 }
 
-// booking se snapshot (project_name, booking_date) DB-side copy hota hai; verify par seedha 'approved'
-export async function insertCommissionFromBooking(bookingId, amount, adminId, conn = db) {
-  try {
-    const [result] = await conn.query(
-      `INSERT INTO commissions
-         (booking_id, partner_id, project_name, booking_date, commission_amount, commission_status, created_by)
-       SELECT booking_id, partner_id, project_name, booking_date, ?, 'approved', ?
-       FROM bookings WHERE booking_id = ?`,
-      [amount, adminId, bookingId],
-    );
-    return result.insertId;
-  } catch (err) {
-    // uq_comm_booking: ek booking pe ek hi commission
-    if (err.code === "ER_DUP_ENTRY") {
-      const e = new Error("Commission already exists for this booking");
-      e.status = 409;
-      throw e;
-    }
-    throw err;
-  }
-}
-
 export async function markPaid(id, paymentDate, paymentDetails, remarks, conn = db) {
   await conn.query(
     `UPDATE commissions
@@ -101,3 +79,4 @@ export async function createNotification(n, conn = db) {
     [n.user_id, n.type, n.title, n.message, n.entity_type, n.entity_id],
   );
 }
+

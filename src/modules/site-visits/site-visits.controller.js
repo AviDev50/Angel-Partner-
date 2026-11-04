@@ -1,5 +1,8 @@
 import * as service from "./site-visits.service.js";
 import { sendError } from "../../utils/httpError.js";
+import { removeUploaded } from "../../utils/files.js";
+
+
 
 export async function scheduleSiteVisit(req, res) {
   try {
@@ -32,19 +35,10 @@ export async function getSiteVisit(req, res) {
 
 export async function completeSiteVisit(req, res) {
   try {
-    const data = await service.completeSiteVisitService(
-      req.user,
-      req.params.id,
-      req.body,
-    );
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Site visit submitted for verification",
-        data,
-      });
+    const data = await service.completeSiteVisitService(req.user, req.params.id, req.body, req.file);
+    res.status(200).json({ success: true, message: "Site visit submitted for verification", data });
   } catch (error) {
+    await removeUploaded(req.file);
     sendError(res, error);
   }
 }

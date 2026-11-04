@@ -1,7 +1,8 @@
 import db from "../../config/db.js";
 
 const LEAD_FROM = `
-  FROM leads l
+   FROM leads l
+  LEFT JOIN customer_references cr ON cr.customer_reference_id = l.customer_reference_id
   LEFT JOIN lead_assignments la
          ON la.lead_id = l.lead_id AND la.is_active = 1 AND la.deleted_at IS NULL
   LEFT JOIN users au ON au.user_id = la.assigned_user_id
@@ -14,7 +15,9 @@ const LEAD_COLUMNS = `
   la.assigned_user_id AS assigned_user_id,
   au.full_name        AS assigned_user_name,
   la.assigned_at      AS assigned_at,
-  sp.full_name        AS source_partner_name
+  sp.full_name        AS source_partner_name,
+  cr.expires_at AS reference_expires_at,
+  (cr.expired_at IS NOT NULL) AS is_reference_expired
 `;
 
 export async function getLeadById(id, conn = db) {
@@ -42,6 +45,7 @@ export async function listLeads({
   assignedUserId,
   assignmentType,
   unassigned,
+  expired,
   page,
   limit,
 }) {
@@ -67,6 +71,7 @@ export async function listLeads({
   if (unassigned) {
     where.push("la.lead_assignment_id IS NULL");
   }
+  if (expired) where.push("cr.expired_at IS NOT NULL");
   if (q) {
     where.push("(l.customer_name LIKE ? OR l.customer_mobile LIKE ?)");
     const like = `%${q}%`;
@@ -238,4 +243,62 @@ export async function createNotification(n, conn = db) {
      VALUES (?, ?, ?, ?, ?, ?)`,
     [n.user_id, n.type, n.title, n.message, n.entity_type, n.entity_id],
   );
+}
+
+// ---------------- auto assign (round robin + sticky)
+const RR_CURSOR_KEY = "auto_assign_last_sales_user_id";
+
+// LOCK IN SHARE MODE => latest committed users dikhein (stale snapshot nahi)
+export async function getActiveSalesUserIds(conn) {
+  const [rows] = await conn.query(
+    `SELECT u.user_id
+     FROM users u
+     JOIN roles r ON r.role_id = u.role_id AND r.deleted_at IS NULL
+     WHERE r.role_name = 'sales_team'
+       AND u.status = 'active' AND u.deleted_at IS NULL
+     ORDER BY u.user_id ASC
+     LOCK IN SHARE MODE`,
+  );
+  return rows.map((r) => r.user_id);
+}
+
+// cursor row lock: ek time pe ek hi transaction round robin chalayega
+export async function lockRoundRobinCursor(conn) {
+  const select = `SELECT setting_value FROM settings WHERE setting_key = ? FOR UPDATE`;
+  let [rows] = await conn.query(select, [RR_CURSOR_KEY]);
+  if (!rows.length) {
+    await conn.query(
+      `INSERT IGNORE INTO settings (setting_key, setting_value, description)
+       VALUES (?, '0', 'Last sales user_id auto-assigned (round robin cursor)')`,
+      [RR_CURSOR_KEY],
+    );
+    [rows] = await conn.query(select, [RR_CURSOR_KEY]);
+  }
+  return Number(rows[0].setting_value) || 0;
+}
+
+export async function saveRoundRobinCursor(userId, conn) {
+  await conn.query(
+    `UPDATE settings SET setting_value = ? WHERE setting_key = ?`,
+    [String(userId), RR_CURSOR_KEY],
+  );
+}
+
+// same customer (mobile) ki sabse purani lead ka active sales member (agar abhi active user hai)
+export async function findStickyAssignee(mobile, conn = db) {
+  const [rows] = await conn.query(
+    `SELECT la.assigned_user_id
+     FROM leads l
+     JOIN lead_assignments la
+            ON la.lead_id = l.lead_id AND la.assignment_type = 'sales_team'
+           AND la.is_active = 1 AND la.deleted_at IS NULL
+     JOIN users u
+            ON u.user_id = la.assigned_user_id
+           AND u.status = 'active' AND u.deleted_at IS NULL
+     WHERE l.customer_mobile = ? AND l.deleted_at IS NULL
+     ORDER BY l.created_at ASC, l.lead_id ASC
+     LIMIT 1`,
+    [mobile],
+  );
+  return rows[0] ? rows[0].assigned_user_id : null;
 }

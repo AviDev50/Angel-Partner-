@@ -31,19 +31,13 @@ export async function insertReference(data, conn = db) {
     `INSERT INTO customer_references
        (partner_id, customer_name, customer_mobile, customer_email, preferred_bhk,
         customer_budget, preferred_project_location, remarks,
-        is_potential_duplicate, duplicate_of_reference_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        is_potential_duplicate, duplicate_of_reference_id, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY))`,
     [
-      data.partner_id,
-      data.customer_name,
-      data.customer_mobile,
-      data.customer_email,
-      data.preferred_bhk,
-      data.customer_budget,
-      data.preferred_project_location,
-      data.remarks,
-      data.is_potential_duplicate,
-      data.duplicate_of_reference_id,
+      data.partner_id, data.customer_name, data.customer_mobile, data.customer_email,
+      data.preferred_bhk, data.customer_budget, data.preferred_project_location,
+      data.remarks, data.is_potential_duplicate, data.duplicate_of_reference_id,
+      data.expiry_days,
     ],
   );
   return result.insertId;
@@ -66,9 +60,22 @@ export async function getReferenceById(id, conn = db) {
   return rows[0];
 }
 
+export async function getExpiryDays(conn = db) {
+  const [rows] = await conn.query(
+    `SELECT setting_value FROM settings
+     WHERE setting_key = 'reference_expiry_days' AND deleted_at IS NULL LIMIT 1`,
+  );
+  const n = Number(rows[0]?.setting_value);
+  return Number.isInteger(n) && n > 0 ? n : 45;
+}
+
+// getReferenceForUpdate: is_expired add karo
 export async function getReferenceForUpdate(id, conn) {
   const [rows] = await conn.query(
-    `SELECT * FROM customer_references
+    `SELECT *,
+            (expired_at IS NOT NULL
+             OR (expires_at IS NOT NULL AND expires_at <= UTC_TIMESTAMP())) AS is_expired
+     FROM customer_references
      WHERE customer_reference_id = ? AND deleted_at IS NULL
      FOR UPDATE`,
     [id],
@@ -76,14 +83,65 @@ export async function getReferenceForUpdate(id, conn) {
   return rows[0];
 }
 
-export async function listReferences({
-  partnerId,
-  status,
-  q,
-  isDuplicate,
-  page,
-  limit,
-}) {
+export async function extendExpiry(id, days, conn = db) {
+  await conn.query(
+`UPDATE customer_references
+ SET expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY)
+ WHERE customer_reference_id = ? AND expired_at IS NULL
+   AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())`
+    [days, id],
+  );
+}
+
+export async function clearExpiry(id, conn = db) {
+  await conn.query(
+ `UPDATE customer_references SET expires_at = NULL
+ WHERE customer_reference_id = ? AND expired_at IS NULL
+   AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())`
+    [id],
+  );
+}
+
+// cron
+export async function findExpiryDue(limit, conn = db) {
+  const [rows] = await conn.query(
+    `SELECT customer_reference_id FROM customer_references
+     WHERE expired_at IS NULL AND expires_at IS NOT NULL
+       AND expires_at <= UTC_TIMESTAMP() AND deleted_at IS NULL
+     ORDER BY customer_reference_id LIMIT ?`,
+    [limit],
+  );
+  return rows.map((r) => r.customer_reference_id);
+}
+
+export async function stampExpired(id, conn) {
+  const [res] = await conn.query(
+    `UPDATE customer_references SET expired_at = UTC_TIMESTAMP()
+     WHERE customer_reference_id = ? AND expired_at IS NULL
+       AND expires_at IS NOT NULL AND expires_at <= UTC_TIMESTAMP()`,
+    [id],
+  );
+  return res.affectedRows === 1;
+}
+
+// listReferences mein partnerView destructure karo aur status block badlo:
+
+// javascript
+// if (status) {
+//   if (partnerView) {
+//     if (status === "expired") {
+//       where.push("r.expired_at IS NOT NULL");
+//     } else {
+//       where.push("r.status = ?", "r.expired_at IS NULL");
+//       params.push(status);
+//     }
+//   } else {
+//     where.push("r.status = ?");
+//     params.push(status);
+//   }
+// }
+
+export async function listReferences({ partnerId, status, q, isDuplicate, partnerView, page, limit }) {
   const where = ["r.deleted_at IS NULL"];
   const params = [];
 
@@ -91,9 +149,14 @@ export async function listReferences({
     where.push("r.partner_id = ?");
     params.push(partnerId);
   }
-  if (status) {
-    where.push("r.status = ?");
-    params.push(status);
+   if (status) {
+    if (partnerView && status === "expired") {
+      where.push("r.expired_at IS NOT NULL");
+    } else {
+      where.push("r.status = ?");
+      params.push(status);
+      if (partnerView) where.push("r.expired_at IS NULL");
+    }
   }
   if (isDuplicate !== undefined) {
     where.push("r.is_potential_duplicate = ?");

@@ -15,9 +15,11 @@ const LEAD_LOCKED = ["converted", "lost", "closed"];
 const MAX_COMMISSION = 100000000;
 
 // sales ko partner info / commission nahi dikhani
+//Bookings service: viewFor mein sales ke liye commission_photo bhi strip karo.
 function viewFor(user, booking) {
   if (user.role === "admin") return booking;
-  const { partner_id, partner_name, commission_id, commission_amount, commission_status, ...rest } = booking;
+const { partner_id, partner_name, commission_id, commission_amount, commission_status,
+        commission_photo, ...rest } = booking;
   return rest;
 }
 
@@ -101,17 +103,24 @@ export async function createBookingService(user, body) {
       throw httpError(409, "This lead already has a booking awaiting verification");
     }
 
+    // sales ne booking submit ki => Stage 2 clock yahin ruk gaya
+const ref = await referenceModel.getReferenceForUpdate(lead.customer_reference_id, conn);
+const commissionEligible = !(ref && ref.is_expired);
+
+
     const bookingId = await model.insertBooking(
-      {
-        lead_id: leadId,
-        partner_id: lead.source_partner_id,
-        project_name: projectName,
-        booking_date: bookingDate,
-        remarks,
-        recorded_by: user.user_id,
-      },
-      conn,
-    );
+  {
+    lead_id: leadId,
+    partner_id: lead.source_partner_id,
+    project_name: projectName,
+    booking_date: bookingDate,
+    remarks,
+    recorded_by: user.user_id,
+    commission_eligible: commissionEligible ? 1 : 0,
+  },
+  conn,
+);
+if (ref) await referenceModel.clearExpiry(ref.customer_reference_id, conn);
 
     await history("booking", bookingId, null, "pending_verification", user.user_id, null, conn);
 
@@ -169,7 +178,7 @@ export async function getBookingService(user, idParam) {
 }
 
 // ---------------------------------------------------------------- verify (admin) + custom commission
-export async function verifyBookingService(user, idParam, body) {
+export async function verifyBookingService(user, idParam, body, file) {
   const decision = String(body.decision || "").trim();
   if (!["verified", "rejected"].includes(decision)) {
     throw httpError(400, "decision must be 'verified' or 'rejected'");
@@ -181,13 +190,10 @@ export async function verifyBookingService(user, idParam, body) {
 
   const hasAmount =
     body.commission_amount !== undefined && body.commission_amount !== null && body.commission_amount !== "";
-  let amount = null;
-  if (decision === "rejected") {
-    if (hasAmount) throw httpError(400, "commission_amount is not allowed when rejecting");
-  } else {
-    if (!hasAmount) throw httpError(400, "commission_amount is required when verifying");
-    amount = parseCommissionAmount(body.commission_amount);
+  if (decision === "rejected" && (hasAmount || file)) {
+    throw httpError(400, "commission_amount and photo are not allowed when rejecting");
   }
+  const amount = hasAmount ? parseCommissionAmount(body.commission_amount) : null;
 
   const id = await withTransaction(async (conn) => {
     const { lead, booking } = await lockBooking(idParam, conn);
@@ -195,15 +201,19 @@ export async function verifyBookingService(user, idParam, body) {
       throw httpError(409, `Booking is '${booking.booking_status}' and cannot be verified`);
     }
 
+    const commissionEligible = Boolean(booking.commission_eligible);
     const newStatus = decision === "verified" ? "booked" : "rejected";
 
     if (decision === "verified") {
-      // submit aur verify ke beech lead lost/closed ho gayi ho to convert nahi karenge
       if (LEAD_LOCKED.includes(lead.status)) {
         throw httpError(409, `Lead is '${lead.status}' and this booking cannot be verified`);
       }
-      if (!booking.partner_id) {
-        throw httpError(409, "Booking has no partner; commission cannot be created");
+      if (commissionEligible) {
+        if (!booking.partner_id) throw httpError(409, "Booking has no partner; commission cannot be created");
+        if (amount === null) throw httpError(400, "commission_amount is required when verifying");
+        if (!file) throw httpError(400, "photo is required (exactly 1 image) when giving commission");
+      } else if (amount !== null || file) {
+        throw httpError(409, "Commission is not allowed: the reference had expired before this booking was submitted");
       }
     }
 
@@ -218,25 +228,23 @@ export async function verifyBookingService(user, idParam, body) {
         await setReferenceStatus(ref, "converted", user.user_id, `Booking #${booking.booking_id} verified`, conn);
       }
 
-      const commissionId = await commissionModel.insertCommissionFromBooking(
-        booking.booking_id,
-        amount,
-        user.user_id,
-        conn,
-      );
-      await history("commission", commissionId, null, "approved", user.user_id, null, conn);
-
-      await model.createNotification(
-        {
-          user_id: booking.partner_id,
-          type: "booking_confirmed",
-          title: "Booking confirmed",
-          message: `Booking confirmed for ${booking.project_name}. Commission of Rs. ${amount} has been added.`,
-          entity_type: "booking",
-          entity_id: booking.booking_id,
-        },
-        conn,
-      );
+      if (commissionEligible) {
+        const commissionId = await commissionModel.insertCommissionFromBooking(
+          booking.booking_id, amount, user.user_id, file.filename, conn,
+        );
+        await history("commission", commissionId, null, "approved", user.user_id, null, conn);
+        await model.createNotification(
+          {
+            user_id: booking.partner_id,
+            type: "booking_confirmed",
+            title: "Booking confirmed",
+            message: `Booking confirmed for ${booking.project_name}. Commission of Rs. ${amount} has been added.`,
+            entity_type: "booking",
+            entity_id: booking.booking_id,
+          },
+          conn,
+        );
+      }
     }
 
     // submit karne wale (sales) ko result batao

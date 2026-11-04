@@ -8,6 +8,7 @@ import {
   verifySiteVisit,
 } from "./site-visits.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
+import { uploadPhoto } from "../../middlewares/upload.js";
 
 const router = express.Router();
 
@@ -16,12 +17,8 @@ router.use(authenticate);
 router.post("/", authorize("admin", "sales_team"), scheduleSiteVisit);
 router.get("/", authorize("admin", "sales_team"), listSiteVisits);
 router.get("/:id", authorize("admin", "sales_team"), getSiteVisit);
-router.patch(
-  "/:id/complete",
-  authorize("admin", "sales_team"),
-  completeSiteVisit,
-);
 router.patch("/:id/cancel", authorize("admin", "sales_team"), cancelSiteVisit);
 router.patch("/:id/verify", authorize("admin"), verifySiteVisit);
+router.patch("/:id/complete", authorize("admin", "sales_team"), uploadPhoto("photo"), completeSiteVisit);
 
 export default router;

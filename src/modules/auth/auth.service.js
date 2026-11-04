@@ -2,6 +2,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import * as authModel from "./auth.model.js";
+import db from "../../config/db.js";
 
 function httpError(status, message) {
   const err = new Error(message);
