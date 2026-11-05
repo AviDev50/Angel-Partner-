@@ -28,12 +28,33 @@ export async function getCommissionForUpdate(id, conn) {
   return rows[0];
 }
 
-export async function markPaid(id, paymentDate, paymentDetails, remarks, conn = db) {
+export async function insertCommissionFromBooking(bookingId, amount, adminId, conn = db) {
+  try {
+    const [result] = await conn.query(
+      `INSERT INTO commissions
+         (booking_id, partner_id, project_name, booking_date, commission_amount, commission_status, created_by)
+       SELECT booking_id, partner_id, project_name, booking_date, ?, 'approved', ?
+       FROM bookings WHERE booking_id = ?`,
+      [amount, adminId, bookingId],
+    );
+    return result.insertId;
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") {
+      const e = new Error("Commission already exists for this booking");
+      e.status = 409;
+      throw e;
+    }
+    throw err;
+  }
+}
+
+export async function markPaid(id, paymentDate, paymentDetails, remarks, photo, conn = db) {
   await conn.query(
     `UPDATE commissions
-     SET commission_status = 'paid', payment_date = ?, payment_details = ?, remarks = COALESCE(?, remarks)
+     SET commission_status = 'paid', payment_date = ?, payment_details = ?,
+         remarks = COALESCE(?, remarks), commission_photo = ?
      WHERE commission_id = ?`,
-    [paymentDate, paymentDetails, remarks, id],
+    [paymentDate, paymentDetails, remarks, photo, id],
   );
 }
 

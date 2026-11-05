@@ -48,9 +48,10 @@ export async function getCommissionService(idParam) {
 }
 
 // ---------------------------------------------------------------- mark paid (admin)
-export async function markPaidService(user, idParam, body) {
+export async function markPaidService(user, idParam, body, file) {
   const id = parsePositiveInt(idParam);
   if (!id) throw httpError(400, "Invalid commission id");
+  if (!file) throw httpError(400, "photo is required (exactly 1 image)");
 
   const paymentDate = parseDateOnly(body.payment_date, "payment_date", { defaultToday: true });
   const paymentDetails = optionalString(body.payment_details, 500, "payment_details");
@@ -64,7 +65,7 @@ export async function markPaidService(user, idParam, body) {
       throw httpError(409, `Commission is '${commission.commission_status}' and cannot be marked as paid`);
     }
 
-    await model.markPaid(id, paymentDate, paymentDetails, remarks, conn);
+    await model.markPaid(id, paymentDate, paymentDetails, remarks, file.filename, conn);
     await referenceModel.addStatusHistory(
       {
         entity_type: "commission",

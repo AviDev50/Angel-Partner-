@@ -5,6 +5,7 @@ import { optionalString } from "../../utils/customerFields.js";
 import * as model from "./redemptions.model.js";
 import * as walletModel from "../wallet/wallet.model.js";
 import * as referenceModel from "../references/references.model.js";
+import { notifyPartner, NOTIFY } from "../../utils/notify.js";
 
 const MAX_POINTS = 1000000;
 
@@ -21,7 +22,8 @@ function parseRedemptionDate(value) {
 }
 
 // ---------------------------------------------------------------- create (admin)
-export async function createRedemptionService(user, body) {
+export async function createRedemptionService(user, body, file) {
+  if (!file) throw httpError(400, "photo is required (exactly 1 image)");
   const partnerId = parsePositiveInt(body.partner_id);
   if (!partnerId) throw httpError(400, "partner_id is required");
 
@@ -53,6 +55,7 @@ export async function createRedemptionService(user, body) {
         redemption_date: redemptionDate,
         remarks,
         admin_id: user.user_id,
+        redemption_photo: file.filename, 
       },
       conn,
     );

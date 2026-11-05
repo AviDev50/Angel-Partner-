@@ -1,6 +1,5 @@
 import * as service from "./bookings.service.js";
 import { sendError } from "../../utils/httpError.js";
-import { removeUploaded } from "../../utils/files.js";
 
 export async function createBooking(req, res) {
   try {
@@ -31,10 +30,9 @@ export async function getBooking(req, res) {
 
 export async function verifyBooking(req, res) {
   try {
-    const data = await service.verifyBookingService(req.user, req.params.id, req.body, req.file);
+    const data = await service.verifyBookingService(req.user, req.params.id, req.body);
     res.status(200).json({ success: true, message: `Booking ${data.booking_status}`, data });
   } catch (error) {
-    await removeUploaded(req.file);
     sendError(res, error);
   }
 }

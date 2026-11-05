@@ -23,9 +23,11 @@ export async function getRedemptionById(id, conn = db) {
 export async function insertRedemption(d, conn = db) {
   const [result] = await conn.query(
     `INSERT INTO redemptions
-       (partner_id, points_redeemed, reward_description, redemption_date, status, remarks, created_by, processed_by)
-     VALUES (?, ?, ?, ?, 'redeemed', ?, ?, ?)`,
-    [d.partner_id, d.points_redeemed, d.reward_description, d.redemption_date, d.remarks, d.admin_id, d.admin_id],
+   (partner_id, points_redeemed, reward_description, redemption_date, status, remarks,
+    created_by, processed_by, redemption_photo)
+ VALUES (?, ?, ?, ?, 'redeemed', ?, ?, ?, ?)`,
+[d.partner_id, d.points_redeemed, d.reward_description, d.redemption_date, d.remarks,
+ d.admin_id, d.admin_id, d.redemption_photo],
   );
   return result.insertId;
 }

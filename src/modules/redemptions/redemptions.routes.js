@@ -1,12 +1,13 @@
 import express from "express";
 import { createRedemption, listRedemptions, getRedemption } from "./redemptions.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
+import { uploadPhoto } from "../../middlewares/upload.js";
 
 const router = express.Router();
 
 router.use(authenticate, authorize("admin"));
 
-router.post("/", createRedemption);
+router.post("/", uploadPhoto("photo"), createRedemption);
 router.get("/", listRedemptions);
 router.get("/:id", getRedemption);
 

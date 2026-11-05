@@ -1,5 +1,6 @@
 import * as service from "./commissions.service.js";
 import { sendError } from "../../utils/httpError.js";
+import { removeUploaded } from "../../utils/files.js";
 
 export async function listCommissions(req, res) {
   try {
@@ -21,9 +22,10 @@ export async function getCommission(req, res) {
 
 export async function markCommissionPaid(req, res) {
   try {
-    const data = await service.markPaidService(req.user, req.params.id, req.body);
+    const data = await service.markPaidService(req.user, req.params.id, req.body, req.file);
     res.status(200).json({ success: true, message: "Commission marked as paid", data });
   } catch (error) {
+    await removeUploaded(req.file);
     sendError(res, error);
   }
 }
