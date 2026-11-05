@@ -93,11 +93,11 @@ export async function getStatusHistory(commissionId, conn = db) {
   return rows;
 }
 
-export async function createNotification(n, conn = db) {
-  await conn.query(
-    `INSERT INTO notifications (user_id, notification_type, title, message, entity_type, entity_id)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [n.user_id, n.type, n.title, n.message, n.entity_type, n.entity_id],
-  );
-}
-
+// export async function createNotification(n, conn = db) {
+//   await conn.query(
+//     `INSERT INTO notifications (user_id, notification_type, title, message, entity_type, entity_id)
+//      VALUES (?, ?, ?, ?, ?, ?)`,
+//     [n.user_id, n.type, n.title, n.message, n.entity_type, n.entity_id],
+//   );
+// }
+export { createNotification } from "../notifications/notifications.model.js";
