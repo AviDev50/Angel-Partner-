@@ -2,6 +2,10 @@ import { httpError } from "../../utils/httpError.js";
 import { parsePositiveInt } from "../../utils/validators.js";
 import * as model from "./wallet.model.js";
 
+const BASE_URL = process.env.BASE_URL;
+
+const photoUrl = (filename) => (filename ? `${BASE_URL}/uploads/${filename}` : null);
+
 const TX_TYPES = ["site_visit_credit", "redemption_debit", "reversal", "correction"];
 const COMMISSION_STATUSES = [
   "pending_eligibility",
@@ -56,8 +60,9 @@ export async function getPartnerWalletService(idParam) {
 
 // ---------------------------------------------------------------- points ledger
 function txView(user, row) {
-  if (user.role === "admin") return row;
-  const { performed_by_name, partner_name, partner_id, ...rest } = row;
+  const withUrl = { ...row, redemption_photo: photoUrl(row.redemption_photo) };
+  if (user.role === "admin") return withUrl;
+  const { performed_by_name, partner_name, partner_id, ...rest } = withUrl;
   return rest;
 }
 
@@ -89,8 +94,9 @@ export async function listPartnerTransactionsService(user, idParam, query) {
 
 // ---------------------------------------------------------------- commissions
 function commissionView(user, row) {
-  if (user.role === "admin") return row;
-  const { payment_details, remarks, partner_id, ...rest } = row;
+  const withUrl = { ...row, commission_photo: photoUrl(row.commission_photo) };
+  if (user.role === "admin") return withUrl;
+  const { payment_details, remarks, partner_id, ...rest } = withUrl;
   return rest;
 }
 

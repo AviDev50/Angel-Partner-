@@ -36,7 +36,6 @@ app.use("/api/notifications", notificationsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/help-requests", helpRequestRoutes);
-app.use("/api/help-requests", helpRequestRoutes);
 app.use("/uploads", express.static("uploads"));
 app.use("/api/pages", staticPageRoutes);
 

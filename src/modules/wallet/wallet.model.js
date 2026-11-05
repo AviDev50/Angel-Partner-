@@ -56,14 +56,16 @@ export async function listTransactions({ partnerId, type, page, limit }, conn = 
   const whereSql = where.join(" AND ");
 
   const [rows] = await conn.query(
-    `SELECT pt.points_transaction_id, pt.partner_id, p.full_name AS partner_name,
+        `SELECT pt.points_transaction_id, pt.partner_id, p.full_name AS partner_name,
             pt.transaction_type, pt.points, pt.balance_after, pt.reason,
             pt.site_visit_id, pt.redemption_id, pt.reverses_transaction_id,
-            sv.project_name, pb.full_name AS performed_by_name, pt.created_at
+            sv.project_name, r.redemption_photo,
+            pb.full_name AS performed_by_name, pt.created_at
      FROM points_transactions pt
      JOIN users p  ON p.user_id  = pt.partner_id
      JOIN users pb ON pb.user_id = pt.performed_by
      LEFT JOIN site_visits sv ON sv.site_visit_id = pt.site_visit_id
+     LEFT JOIN redemptions r  ON r.redemption_id  = pt.redemption_id
      WHERE ${whereSql}
      ORDER BY pt.created_at DESC, pt.points_transaction_id DESC
      LIMIT ? OFFSET ?`,
@@ -91,9 +93,9 @@ export async function listCommissions({ partnerId, status, page, limit }, conn =
   const whereSql = where.join(" AND ");
 
   const [rows] = await conn.query(
-    `SELECT c.commission_id, c.partner_id, c.booking_id, c.project_name, c.booking_date,
+       `SELECT c.commission_id, c.partner_id, c.booking_id, c.project_name, c.booking_date,
             c.commission_amount, c.commission_status, c.payment_date,
-            c.payment_details, c.remarks, c.created_at
+            c.payment_details, c.remarks, c.commission_photo, c.created_at
      FROM commissions c
      WHERE ${whereSql}
      ORDER BY c.created_at DESC, c.commission_id DESC
