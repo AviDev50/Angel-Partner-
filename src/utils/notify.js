@@ -22,6 +22,10 @@ export const NOTIFY = {
   ANNOUNCEMENT: "announcement",
   ADMIN_MESSAGE: "admin_message",
   REFERENCE_EXPIRED: "reference_expired",
+  BOOKING_CONFIRMED: "booking_confirmed",
+  BOOKING_VERIFIED: "booking_verified",
+  BOOKING_REJECTED: "booking_rejected",
+  LEAD_ASSIGNED_TO_YOU: "lead_assigned_to_you",
 };
 
 // partner ko dikhane ke liye IST format

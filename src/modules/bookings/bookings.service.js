@@ -235,7 +235,7 @@ if (commissionEligible) {
         await model.createNotification(
           {
             user_id: booking.partner_id,
-            type: "booking_confirmed",
+            type: NOTIFY.BOOKING_CONFIRMED,
             title: "Booking confirmed",
             message: `Booking confirmed for ${booking.project_name}. Commission of Rs. ${amount} has been added.`,
             entity_type: "booking",
@@ -251,7 +251,7 @@ if (commissionEligible) {
       await model.createNotification(
         {
           user_id: booking.recorded_by,
-          type: decision === "verified" ? "booking_verified" : "booking_rejected",
+        type: decision === "verified" ? NOTIFY.BOOKING_VERIFIED : NOTIFY.BOOKING_REJECTED,
           title: decision === "verified" ? "Booking verified" : "Booking rejected",
           message:
             decision === "verified"

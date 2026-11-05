@@ -359,7 +359,7 @@ export async function autoAssignLead(conn, { leadId, mobile, assignedBy }) {
   await createNotification(
     {
       user_id: userId,
-      type: "lead_assigned_to_you",
+      type: NOTIFY.LEAD_ASSIGNED_TO_YOU,
       title: "New lead assigned",
       message: `A new lead${lead ? ` (${lead.customer_name})` : ""} has been assigned to you.`,
       entity_type: "lead",

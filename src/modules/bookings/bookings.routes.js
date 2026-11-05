@@ -1,7 +1,6 @@
 import express from "express";
 import { createBooking, listBookings, getBooking, verifyBooking } from "./bookings.controller.js";
 import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
-import { uploadPhoto } from "../../middlewares/upload.js";
 
 const router = express.Router();
 
