@@ -1,4 +1,6 @@
 import db from "../config/db.js";
+import { sendPushToUsers } from "../modules/notifications/push.service.js";
+import { runAfterCommit } from "./afterCommit.js";
 
 // Notification types (Flutter app icon/deep-link inko se map karega)
 export const NOTIFY = {
@@ -51,7 +53,21 @@ function values(n) {
   ];
 }
 
-// customerReferenceId do => wo reference expired ho to notification skip
+// push ke liye title/body wahi jo in-app mein save hua (same truncation)
+function pushPayload(n, extra = {}) {
+  return {
+    title: String(n.title).slice(0, 200),
+    body: String(n.message).slice(0, 1000),
+    data: {
+      type: n.type,
+      entity_type: n.entityType,
+      entity_id: n.entityId,
+      announcement_id: n.announcementId,
+      ...extra,
+    },
+  };
+}
+
 export async function notifyPartner(conn, { partnerId, customerReferenceId, ...n }) {
   const params = [...values(n), partnerId];
   let skipExpired = "";
@@ -68,12 +84,25 @@ export async function notifyPartner(conn, { partnerId, customerReferenceId, ...n
      ${skipExpired}`,
     params,
   );
+
+  // affectedRows 0 => expired reference ki wajah se skip hua, push bhi nahi jayegi
+  if (res.affectedRows) {
+    runAfterCommit(conn, () =>
+      sendPushToUsers([partnerId], pushPayload(n, { notification_id: res.insertId })),
+    );
+  }
   return res.affectedRows;
 }
 
-// Kuch chuninda active partners ko (admin custom send)
 export async function notifyPartners(conn, partnerIds, n) {
-  const [res] = await (conn || db).query(
+  const c = conn || db;
+  const [targets] = await c.query(
+    `SELECT u.user_id ${PARTNER_FROM}
+     WHERE u.user_id IN (?) AND r.role_name = 'partner'
+       AND u.status = 'active' AND u.deleted_at IS NULL`,
+    [partnerIds],
+  );
+  const [res] = await c.query(
     `${INSERT_HEAD}
      SELECT u.user_id, ?, ?, ?, ?, ?, ?
      ${PARTNER_FROM}
@@ -81,17 +110,31 @@ export async function notifyPartners(conn, partnerIds, n) {
        AND u.status = 'active' AND u.deleted_at IS NULL`,
     [...values(n), partnerIds],
   );
+
+  if (res.affectedRows) {
+    const ids = targets.map((t) => t.user_id);
+    runAfterCommit(conn, () => sendPushToUsers(ids, pushPayload(n)));
+  }
   return res.affectedRows;
 }
 
-// Sab active partners ko (broadcast)
 export async function notifyAllPartners(conn, n) {
-  const [res] = await (conn || db).query(
+  const c = conn || db;
+  const [targets] = await c.query(
+    `SELECT u.user_id ${PARTNER_FROM}
+     WHERE r.role_name = 'partner' AND u.status = 'active' AND u.deleted_at IS NULL`,
+  );
+  const [res] = await c.query(
     `${INSERT_HEAD}
      SELECT u.user_id, ?, ?, ?, ?, ?, ?
      ${PARTNER_FROM}
      WHERE r.role_name = 'partner' AND u.status = 'active' AND u.deleted_at IS NULL`,
     values(n),
   );
+
+  if (res.affectedRows) {
+    const ids = targets.map((t) => t.user_id);
+    runAfterCommit(conn, () => sendPushToUsers(ids, pushPayload(n)));
+  }
   return res.affectedRows;
 }

@@ -118,3 +118,24 @@ export async function deleteMineService(user, idParam) {
   const deleted = await model.deleteForUser(id, user.user_id);
   if (!deleted) throw httpError(404, "Notification not found");
 }
+
+const PLATFORMS = ["android", "ios", "web"];
+
+function parseToken(body) {
+  const t = typeof body.fcm_token === "string" ? body.fcm_token.trim() : "";
+  if (!t || t.length > 255) throw httpError(400, "fcm_token is required (max 255 chars)");
+  return t;
+}
+
+export async function registerDeviceTokenService(user, body) {
+  const token = parseToken(body);
+  const platform = body.platform ?? null;
+  if (platform !== null && !PLATFORMS.includes(platform)) {
+    throw httpError(400, `platform must be one of: ${PLATFORMS.join(", ")}`);
+  }
+  await model.upsertDeviceToken(user.user_id, token, platform);
+}
+
+export async function removeDeviceTokenService(user, body) {
+  await model.softDeleteDeviceToken(user.user_id, parseToken(body));
+}

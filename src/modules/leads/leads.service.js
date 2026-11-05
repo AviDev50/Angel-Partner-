@@ -6,6 +6,7 @@ import * as leadModel from "./leads.model.js";
 import * as referenceModel from "../references/references.model.js";
 import { notifyPartner, NOTIFY } from "../../utils/notify.js";
 import * as siteVisitModel from "../site-visits/site-visits.model.js";
+import { createNotification } from "../notifications/notifications.model.js";
 
 const LEAD_STATUSES = [
   "new",
@@ -351,6 +352,18 @@ export async function autoAssignLead(conn, { leadId, mobile, assignedBy }) {
       assigned_user_id: userId,
       assigned_by: assignedBy,
       remarks: `Auto-assigned (${mode})`,
+    },
+    conn,
+  );
+   const lead = await leadModel.getLeadById(leadId, conn);
+  await createNotification(
+    {
+      user_id: userId,
+      type: "lead_assigned_to_you",
+      title: "New lead assigned",
+      message: `A new lead${lead ? ` (${lead.customer_name})` : ""} has been assigned to you.`,
+      entity_type: "lead",
+      entity_id: leadId,
     },
     conn,
   );

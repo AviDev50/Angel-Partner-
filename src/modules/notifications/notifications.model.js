@@ -1,4 +1,23 @@
 import db from "../../config/db.js";
+import { sendPushToUser } from "./push.service.js";
+import { runAfterCommit } from "../../utils/afterCommit.js";
+
+export async function createNotification(n, conn = db) {
+  const [res] = await conn.query(
+    `INSERT INTO notifications
+       (user_id, notification_type, title, message, entity_type, entity_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [n.user_id, n.type, n.title, n.message, n.entity_type ?? null, n.entity_id ?? null],
+  );
+  runAfterCommit(conn, () =>
+    sendPushToUser(n.user_id, {
+      title: n.title,
+      body: n.message,
+      data: { notification_id: res.insertId, type: n.type, entity_type: n.entity_type, entity_id: n.entity_id },
+    }),
+  );
+  return res.insertId;
+}
 
 const COLUMNS = `
   notification_id, notification_type, title, message, entity_type, entity_id,
@@ -120,4 +139,22 @@ export async function deleteForUser(id, userId) {
     [id, userId],
   );
   return res.affectedRows;
+}
+
+export async function upsertDeviceToken(userId, fcmToken, platform) {
+  await db.query(
+    `INSERT INTO device_tokens (user_id, fcm_token, platform, last_used_at)
+     VALUES (?, ?, ?, UTC_TIMESTAMP())
+     ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), platform = VALUES(platform),
+                             last_used_at = UTC_TIMESTAMP(), deleted_at = NULL`,
+    [userId, fcmToken, platform],
+  );
+}
+
+export async function softDeleteDeviceToken(userId, fcmToken) {
+  await db.query(
+    `UPDATE device_tokens SET deleted_at = UTC_TIMESTAMP()
+     WHERE fcm_token = ? AND user_id = ? AND deleted_at IS NULL`,
+    [fcmToken, userId],
+  );
 }
