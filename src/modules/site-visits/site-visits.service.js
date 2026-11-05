@@ -7,6 +7,7 @@ import * as model from "./site-visits.model.js";
 import * as leadModel from "../leads/leads.model.js";
 import * as referenceModel from "../references/references.model.js";
 import { notifyPartner, NOTIFY,formatIST } from "../../utils/notify.js";
+import { photoUrl } from "../../utils/files.js";
 
 
 const VISIT_STATUSES = [
@@ -21,7 +22,8 @@ const MAX_POINTS = 1000000;
 
 // sales ko partner info / points nahi dikhane
 function viewFor(user, visit) {
-  if (user.role === "admin") return visit;
+  const withUrl = { ...visit, completion_photo: photoUrl(visit.completion_photo) };
+  if (user.role === "admin") return withUrl;
   const {
     partner_id,
     partner_name,
@@ -31,7 +33,7 @@ function viewFor(user, visit) {
     duplicate_of_reference_code,
     duplicate_count,
     ...rest
-  } = visit;
+  } = withUrl;
   return rest;
 }
 
@@ -519,5 +521,5 @@ if (ref) await referenceModel.clearExpiry(ref.customer_reference_id, conn); // r
     return visit.site_visit_id;
   });
 
-  return model.getVisitById(id);
+  return viewFor(user, await model.getVisitById(id));
 }
